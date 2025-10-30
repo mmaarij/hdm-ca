@@ -56,44 +56,6 @@ export const optionalNullable = <A, I, R>(schema: S.Schema<A, I, R>) =>
   S.optional(S.NullOr(schema));
 
 /**
- * Create a limited string array schema
- */
-export const LimitedStringArray = (params: {
-  maxItems: number;
-  maxItemLength?: number;
-  message?: string;
-}) =>
-  S.Array(
-    params.maxItemLength
-      ? S.String.pipe(S.maxLength(params.maxItemLength))
-      : S.String
-  ).pipe(
-    S.maxItems(params.maxItems, {
-      message: () =>
-        params.message ||
-        `Array cannot have more than ${params.maxItems} items`,
-    })
-  );
-
-/**
- * Create a future date schema
- */
-export const FutureDate = S.Date.pipe(
-  S.filter((date) => date > new Date(), {
-    message: () => "Date must be in the future",
-  })
-);
-
-/**
- * Create a past date schema
- */
-export const PastDate = S.Date.pipe(
-  S.filter((date) => date < new Date(), {
-    message: () => "Date must be in the past",
-  })
-);
-
-/**
  * Create an enum from a const array
  */
 export const enumFromArray = <T extends readonly string[]>(values: T) =>
@@ -114,34 +76,6 @@ export const Url = S.String.pipe(
     },
     { message: () => "Invalid URL format" }
   )
-);
-
-/**
- * Create a hex color schema
- */
-export const HexColor = S.String.pipe(
-  S.pattern(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/, {
-    message: () => "Invalid hex color format",
-  })
-);
-
-/**
- * Create a slug schema (URL-friendly string)
- */
-export const Slug = S.String.pipe(
-  S.pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-    message: () =>
-      "Invalid slug format (use lowercase letters, numbers, and hyphens)",
-  })
-);
-
-/**
- * Create a semver schema
- */
-export const SemVer = S.String.pipe(
-  S.pattern(/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?(?:\+[a-zA-Z0-9.-]+)?$/, {
-    message: () => "Invalid semantic version format",
-  })
 );
 
 /**
