@@ -32,6 +32,8 @@ export {
 } from "./document/value-object";
 export * from "./document/schema";
 export * from "./document/errors";
+export * from "./document/aggregate";
+export * from "./document/service";
 export {
   isDocumentOwner,
   isValidFileSize,
@@ -41,10 +43,7 @@ export {
   guardDocumentOwnership,
   guardSafeFilename,
 } from "./document/guards";
-export {
-  DocumentRepository,
-  DocumentRepositoryTag,
-} from "./document/repository";
+export { DocumentRepositoryTag } from "./document/repository";
 
 // Permission domain
 export * from "./permission/entity";

@@ -54,6 +54,16 @@ export interface DocumentRepository {
   /**
    * Create a new document version
    */
+  /**
+   * Create a new document version.
+   *
+   * DocumentVersion instances are part of the Document aggregate
+   * and should be prepared/managed via the aggregate root in domain logic.
+   * Repository implementations still persist versions, but application code
+   * should create the version payload using the aggregate (for example
+   * DocumentAggregate.prepareAddVersion) and then call this method. External
+   * code should not mutate DocumentVersion instances directly.
+   */
   readonly createVersion: (
     payload: CreateDocumentVersionPayload
   ) => Effect.Effect<DocumentVersion, DocumentDomainError>;

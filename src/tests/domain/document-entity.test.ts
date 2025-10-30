@@ -17,7 +17,10 @@ import {
   resetFactories,
   makeTestDocument,
   makeTestDocumentVersion,
+  makeTestDocumentWithVersions,
 } from "../factories";
+
+import { DocumentAggregate } from "../../app/domain";
 
 describe("Document Value Objects", () => {
   beforeEach(() => {
@@ -266,6 +269,79 @@ describe("Document Value Objects", () => {
       const doc = makeTestDocument({ filename: customFilename });
 
       expect(doc.filename).toBe(customFilename);
+    });
+  });
+
+  describe("DocumentAggregate", () => {
+    test("prepareAddVersion sets versionNumber to 1 when no versions exist", () => {
+      const doc = makeTestDocument();
+      const agg = DocumentAggregate.from(doc, []);
+
+      const payload = agg.prepareAddVersion({
+        filename: doc.filename,
+        originalName: doc.originalName,
+        mimeType: doc.mimeType,
+        size: doc.size,
+        path: doc.path,
+        uploadedBy: doc.uploadedBy,
+      } as any);
+
+      expect(payload.documentId).toBe(doc.id);
+      expect(payload.versionNumber as any).toBe(1);
+    });
+
+    test("prepareAddVersion increments based on existing versions", () => {
+      const { document, versions } = makeTestDocumentWithVersions(
+        2,
+        makeTestDocument().uploadedBy
+      );
+      const agg = DocumentAggregate.from(document, versions);
+
+      const payload = agg.prepareAddVersion({
+        filename: document.filename,
+        originalName: document.originalName,
+        mimeType: document.mimeType,
+        size: document.size,
+        path: document.path,
+        uploadedBy: document.uploadedBy,
+      } as any);
+
+      expect(payload.versionNumber as any).toBe(3);
+    });
+
+    test("attachVersion is idempotent and adds persisted version", () => {
+      const { document, versions } = makeTestDocumentWithVersions(
+        1,
+        makeTestDocument().uploadedBy
+      );
+      const agg = DocumentAggregate.from(document, versions);
+
+      const newVersion = makeTestDocumentVersion({
+        documentId: document.id,
+        versionNumber: 2 as any,
+      });
+
+      const withAttached = agg.attachVersion(newVersion);
+      expect(withAttached.allVersions.length).toBe(2);
+
+      const attachedAgain = withAttached.attachVersion(newVersion);
+      expect(attachedAgain.allVersions.length).toBe(2);
+    });
+
+    test("removeVersionById removes a version from aggregate", () => {
+      const { document, versions } = makeTestDocumentWithVersions(
+        2,
+        makeTestDocument().uploadedBy
+      );
+      const agg = DocumentAggregate.from(document, versions);
+
+      const idToRemove = versions[0].id;
+      const afterRemoval = agg.removeVersionById(idToRemove);
+
+      expect(afterRemoval.allVersions.length).toBe(1);
+      expect(afterRemoval.allVersions.some((v) => v.id === idToRemove)).toBe(
+        false
+      );
     });
   });
 });
