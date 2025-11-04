@@ -1,5 +1,4 @@
-import { Schema as S, Effect } from "effect";
-import crypto from "crypto";
+import { Schema as S } from "effect";
 
 /**
  * Password policy & validation (plain password input).
@@ -55,7 +54,8 @@ export const makePasswordSync = (input: unknown) =>
 
 /**
  * Hashed password (opaque string; storage-safe bounds).
- * We store as 'algo:params:salt:hash' (e.g., 'scrypt:N=16384,r=8,p=1:<saltBase64>:<hashBase64>').
+ * Represents an already-hashed password ready for storage.
+ * Actual hashing is done by infrastructure adapters (bcrypt, argon2, etc.)
  */
 export const HashedPassword = S.String.pipe(
   S.filter((value) => value.length > 0, {
@@ -70,67 +70,3 @@ export type HashedPassword = S.Schema.Type<typeof HashedPassword>;
 
 export const makeHashedPassword = (input: unknown) =>
   S.decodeUnknown(HashedPassword)(input);
-
-/**
- * Scrypt parameters (balanced for server-side; tune to your SLA)
- * rules for scrypt:
- *  N: the cost factor, the number of iterations of the algorithm
- *  r: the block size (memory usage)
- *  p: the parallelization factor (threads)
- *  salt: a random salt (random bytes)
- *  key: the derived key
- *  encoded: the encoded password
- *
- */
-const SCRYPT_N = 16384;
-const SCRYPT_r = 8;
-const SCRYPT_p = 1;
-const SALT_BYTES = 16;
-const KEYLEN = 64;
-
-/** Hash a valid Password with scrypt and random salt, returning a branded HashedPassword. */
-export const hashPassword = (
-  password: string
-): Effect.Effect<HashedPassword, Error, never> =>
-  Effect.try(() => {
-    const salt = crypto.randomBytes(SALT_BYTES);
-    const key = crypto.scryptSync(password, salt, KEYLEN, {
-      N: SCRYPT_N,
-      r: SCRYPT_r,
-      p: SCRYPT_p,
-    });
-    const encoded = `scrypt:N=${SCRYPT_N},r=${SCRYPT_r},p=${SCRYPT_p}:${salt.toString(
-      "base64"
-    )}:${key.toString("base64")}`;
-    return S.decodeUnknownSync(HashedPassword)(encoded);
-  });
-
-/** Verify a plain password against a stored HashedPassword. */
-export const verifyPassword = (
-  password: string,
-  stored: HashedPassword
-): Effect.Effect<boolean, Error, never> =>
-  Effect.try(() => {
-    const parts = stored.split(":");
-    if (parts.length !== 4) return false;
-
-    const [algoPart, paramsPart, saltPart, hashPart] = parts;
-    if (!algoPart.startsWith("scrypt") || !saltPart || !hashPart) return false;
-
-    const conf: Record<string, string> = Object.fromEntries(
-      paramsPart.split(",").map((kv) => kv.split("="))
-    );
-    const N = Number(conf["N"] ?? SCRYPT_N);
-    const r = Number(conf["r"] ?? SCRYPT_r);
-    const p = Number(conf["p"] ?? SCRYPT_p);
-
-    const salt = Buffer.from(saltPart, "base64");
-    const expected = Buffer.from(hashPart, "base64");
-    const derived = crypto.scryptSync(password, salt, expected.length, {
-      N,
-      r,
-      p,
-    });
-
-    return crypto.timingSafeEqual(derived, expected);
-  });

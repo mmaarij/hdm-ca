@@ -11,7 +11,7 @@ import { UserRepositoryTag } from "../../domain/user/repository";
 import { PermissionRepositoryTag } from "../../domain/permission/repository";
 import { NotFoundError } from "../../domain/shared/base.errors";
 import { InsufficientPermissionError } from "../utils/errors";
-import { StorageServiceTag } from "./document-workflow";
+import { StoragePort, StoragePortTag } from "../ports/storage.port";
 import { withUseCaseLogging } from "../utils/logging";
 import { canWrite, canRead } from "../../domain/permission/access-service";
 import { UserId, DocumentId } from "../../domain/refined/uuid";
@@ -85,7 +85,7 @@ export const DocumentVersionWorkflowLive = Layer.effect(
     const documentService = yield* DocumentServiceTag;
     const userRepo = yield* UserRepositoryTag;
     const permissionRepo = yield* PermissionRepositoryTag;
-    const storageService = yield* StorageServiceTag;
+    const storageService = yield* StoragePortTag;
 
     const uploadNewVersion: DocumentVersionWorkflow["uploadNewVersion"] = (
       command

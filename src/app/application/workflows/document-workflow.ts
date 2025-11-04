@@ -20,6 +20,7 @@ import {
   isAdmin,
 } from "../../domain/permission/access-service";
 import { UserId, DocumentId } from "../../domain/refined/uuid";
+import { StoragePort, StoragePortTag } from "../ports/storage.port";
 import type {
   UploadDocumentCommand,
   GetDocumentQuery,
@@ -43,30 +44,6 @@ import type {
   InitiateUploadResponse,
   ConfirmUploadResponse,
 } from "../dtos/document/response.dto";
-
-/**
- * Storage Service Interface
- *
- * Abstraction for file storage operations (implementation in infrastructure)
- */
-export interface StorageService {
-  readonly moveToStorage: (
-    tempPath: string,
-    filename: string
-  ) => Effect.Effect<string, Error>; // Returns final storage path
-  readonly generatePresignedUploadUrl: (
-    filename: string,
-    mimeType: string
-  ) => Effect.Effect<
-    { url: string; contentRef: string; expiresAt: Date },
-    Error
-  >; // Pre-signed URL for direct upload
-  readonly deleteFile: (path: string) => Effect.Effect<void, Error>;
-}
-
-export const StorageServiceTag = Context.GenericTag<StorageService>(
-  "@app/StorageService"
-);
 
 /**
  * Document Workflow Interface
@@ -186,7 +163,7 @@ export const DocumentWorkflowLive = Layer.effect(
     const documentRepo = yield* DocumentRepositoryTag;
     const userRepo = yield* UserRepositoryTag;
     const permissionRepo = yield* PermissionRepositoryTag;
-    const storageService = yield* StorageServiceTag;
+    const storageService = yield* StoragePortTag;
 
     const initiateUpload: DocumentWorkflow["initiateUpload"] = (command) =>
       withUseCaseLogging(

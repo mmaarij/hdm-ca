@@ -16,10 +16,8 @@ export * from "./models";
 // Services
 export * from "./services/drizzle-service";
 
-// Storage
-export * from "./storage/storage.interface";
-export * from "./storage/local-storage";
-export * from "./storage/storage.factory";
+// Adapters (Port Implementations)
+export * from "./adapters";
 
 // Repositories
 export * from "./repositories/user-repository.impl";

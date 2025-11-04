@@ -17,7 +17,6 @@ import {
 } from "../../domain/user/errors";
 import { DrizzleService } from "../services/drizzle-service";
 import { users } from "../models";
-import { hashPassword } from "../../domain/refined/password";
 import { v4 as uuid } from "uuid";
 import { detectDbConstraint } from "../../domain/shared/base.repository";
 
@@ -32,18 +31,13 @@ export const UserRepositoryLive = Layer.effect(
     const create: UserRepository["create"] = (payload) =>
       Effect.gen(function* () {
         const id = uuid();
-        const hashedPass = yield* hashPassword(payload.password).pipe(
-          Effect.mapError(
-            (e) => new UserConstraintError({ message: String(e) })
-          )
-        );
 
         yield* Effect.tryPromise({
           try: () =>
             db.insert(users).values({
               id,
               email: payload.email,
-              password: hashedPass,
+              password: payload.password, // Already hashed by workflow
               role: payload.role || "USER",
             }),
           catch: (error) => {
@@ -108,12 +102,7 @@ export const UserRepositoryLive = Layer.effect(
 
         if (payload.email) updateData.email = payload.email;
         if (payload.password) {
-          const hashedPass = yield* hashPassword(payload.password).pipe(
-            Effect.mapError(
-              (e) => new UserConstraintError({ message: String(e) })
-            )
-          );
-          updateData.password = hashedPass;
+          updateData.password = payload.password; // Already hashed by workflow
         }
         if (payload.role) updateData.role = payload.role;
 

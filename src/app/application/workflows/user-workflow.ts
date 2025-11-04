@@ -14,6 +14,12 @@ import {
 import { NotFoundError, ForbiddenError } from "../../domain/shared/base.errors";
 import { InvalidCredentialsError } from "../utils/errors";
 import { withUseCaseLogging } from "../utils/logging";
+import {
+  PasswordHasherPort,
+  PasswordHasherPortTag,
+} from "../ports/password-hasher.port";
+import { JwtPort, JwtPortTag } from "../ports/jwt.port";
+import { makePassword } from "../../domain/refined/password";
 import type {
   RegisterUserCommand,
   LoginUserCommand,
@@ -83,49 +89,14 @@ export const UserWorkflowTag =
   Context.GenericTag<UserWorkflow>("@app/UserWorkflow");
 
 /**
- * Password Hashing Service Interface
- *
- * Abstraction for password hashing (implementation in infrastructure)
- */
-export interface PasswordHasher {
-  readonly hash: (password: string) => Effect.Effect<string, Error>;
-  readonly verify: (
-    password: string,
-    hash: string
-  ) => Effect.Effect<boolean, Error>;
-}
-
-export const PasswordHasherTag = Context.GenericTag<PasswordHasher>(
-  "@app/PasswordHasher"
-);
-
-/**
- * JWT Token Service Interface
- *
- * Abstraction for JWT operations (implementation in infrastructure)
- */
-export interface JWTService {
-  readonly sign: (payload: {
-    userId: string;
-    email: string;
-    role: string;
-  }) => Effect.Effect<{ token: string; expiresIn: number }, Error>;
-  readonly verify: (
-    token: string
-  ) => Effect.Effect<{ userId: string; email: string; role: string }, Error>;
-}
-
-export const JWTServiceTag = Context.GenericTag<JWTService>("@app/JWTService");
-
-/**
  * Live implementation of UserWorkflow
  */
 export const UserWorkflowLive = Layer.effect(
   UserWorkflowTag,
   Effect.gen(function* () {
     const userRepo = yield* UserRepositoryTag;
-    const passwordHasher = yield* PasswordHasherTag;
-    const jwtService = yield* JWTServiceTag;
+    const passwordHasher = yield* PasswordHasherPortTag;
+    const jwtService = yield* JwtPortTag;
 
     const registerUser: UserWorkflow["registerUser"] = (command) =>
       withUseCaseLogging(
@@ -143,7 +114,8 @@ export const UserWorkflowLive = Layer.effect(
           }
 
           // Hash password
-          const hashedPassword = yield* passwordHasher.hash(command.password);
+          const password = yield* makePassword(command.password);
+          const hashedPassword = yield* passwordHasher.hash(password);
 
           // Create user
           const user = yield* userRepo.create({
@@ -177,8 +149,9 @@ export const UserWorkflowLive = Layer.effect(
           const user = userOpt.value;
 
           // Verify password
+          const password = yield* makePassword(command.password);
           const isValidPassword = yield* passwordHasher.verify(
-            command.password,
+            password,
             user.password
           );
 
@@ -268,9 +241,8 @@ export const UserWorkflowLive = Layer.effect(
           }
 
           if (command.password) {
-            updatePayload.password = yield* passwordHasher.hash(
-              command.password
-            );
+            const password = yield* makePassword(command.password);
+            updatePayload.password = yield* passwordHasher.hash(password);
           }
 
           // Update user
