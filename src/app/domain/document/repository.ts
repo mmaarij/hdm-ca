@@ -5,10 +5,12 @@ import {
   CreateDocumentPayload,
   CreateDocumentVersionPayload,
   UpdateDocumentPayload,
+  UpdateDocumentVersionPayload,
   DocumentWithVersion,
 } from "./entity";
 import { DocumentDomainError } from "./errors";
 import { DocumentId, DocumentVersionId, UserId } from "../refined/uuid";
+import { Checksum, ContentRef } from "./value-object";
 
 /**
  * Pagination parameters
@@ -83,6 +85,20 @@ export interface DocumentRepository {
   ) => Effect.Effect<Option.Option<DocumentVersion>, DocumentDomainError>;
 
   /**
+   * Find version by checksum (for idempotency)
+   */
+  readonly findVersionByChecksum: (
+    checksum: Checksum
+  ) => Effect.Effect<Option.Option<DocumentVersion>, DocumentDomainError>;
+
+  /**
+   * Find version by content reference
+   */
+  readonly findVersionByContentRef: (
+    contentRef: ContentRef
+  ) => Effect.Effect<Option.Option<DocumentVersion>, DocumentDomainError>;
+
+  /**
    * Get latest version of a document
    */
   readonly getLatestVersion: (
@@ -126,6 +142,14 @@ export interface DocumentRepository {
     id: DocumentId,
     payload: UpdateDocumentPayload
   ) => Effect.Effect<Document, DocumentDomainError>;
+
+  /**
+   * Update document version
+   */
+  readonly updateVersion: (
+    id: DocumentVersionId,
+    payload: UpdateDocumentVersionPayload
+  ) => Effect.Effect<DocumentVersion, DocumentDomainError>;
 
   /**
    * Delete document (and all versions)

@@ -26,7 +26,9 @@ export const documentVersions = sqliteTable(
     originalName: text("original_name").notNull(),
     mimeType: text("mime_type").notNull(),
     size: integer("size").notNull(),
-    path: text("path").notNull(),
+    path: text("path"), // Optional until upload confirmed
+    contentRef: text("content_ref"), // Unique content identifier
+    checksum: text("checksum"), // SHA-256 hash for idempotency
     versionNumber: integer("version_number").notNull(),
     uploadedBy: text("uploaded_by")
       .notNull()
@@ -44,6 +46,10 @@ export const documentVersions = sqliteTable(
     uniqueVersionPerDoc: unique("unique_version_per_document").on(
       table.documentId,
       table.versionNumber
+    ),
+    checksumIdx: index("idx_document_versions_checksum").on(table.checksum),
+    contentRefIdx: index("idx_document_versions_content_ref").on(
+      table.contentRef
     ),
   })
 );

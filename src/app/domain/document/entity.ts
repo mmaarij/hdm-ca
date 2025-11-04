@@ -7,6 +7,9 @@ import {
   MimeType,
   FileSize,
   VersionNumber,
+  DocumentStatus,
+  ContentRef,
+  Checksum,
 } from "./value-object";
 
 /**
@@ -21,7 +24,8 @@ export const Document = S.Struct({
   originalName: Filename,
   mimeType: MimeType,
   size: FileSize,
-  path: FilePath,
+  path: S.optional(FilePath), // Optional for metadata-only creation
+  status: DocumentStatus, // DRAFT or PUBLISHED
   uploadedBy: UserId,
   createdAt: S.optional(DateTime),
   updatedAt: S.optional(DateTime),
@@ -41,7 +45,9 @@ export const DocumentVersion = S.Struct({
   originalName: Filename,
   mimeType: MimeType,
   size: FileSize,
-  path: FilePath,
+  path: S.optional(FilePath), // Optional until upload confirmed
+  contentRef: S.optional(ContentRef), // Unique content identifier
+  checksum: S.optional(Checksum), // SHA-256 hash for idempotency
   versionNumber: VersionNumber,
   uploadedBy: UserId,
   createdAt: S.optional(DateTime),
@@ -58,7 +64,8 @@ export const CreateDocumentPayload = S.Struct({
   originalName: Filename,
   mimeType: MimeType,
   size: FileSize,
-  path: FilePath,
+  path: S.optional(FilePath), // Optional for metadata-only creation
+  status: S.optional(DocumentStatus), // Defaults to DRAFT
   uploadedBy: UserId,
 });
 
@@ -74,7 +81,9 @@ export const CreateDocumentVersionPayload = S.Struct({
   originalName: Filename,
   mimeType: MimeType,
   size: FileSize,
-  path: FilePath,
+  path: S.optional(FilePath), // Optional until upload confirmed
+  contentRef: S.optional(ContentRef),
+  checksum: S.optional(Checksum),
   versionNumber: VersionNumber,
   uploadedBy: UserId,
 });
@@ -90,10 +99,27 @@ export const UpdateDocumentPayload = S.partial(
   S.Struct({
     filename: Filename,
     originalName: Filename,
+    path: FilePath,
+    status: DocumentStatus,
   })
 );
 
 export type UpdateDocumentPayload = S.Schema.Type<typeof UpdateDocumentPayload>;
+
+/**
+ * Update Document Version payload
+ */
+export const UpdateDocumentVersionPayload = S.partial(
+  S.Struct({
+    path: FilePath,
+    contentRef: ContentRef,
+    checksum: Checksum,
+  })
+);
+
+export type UpdateDocumentVersionPayload = S.Schema.Type<
+  typeof UpdateDocumentVersionPayload
+>;
 
 /**
  * Document with its latest version (for listing)

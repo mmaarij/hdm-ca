@@ -45,7 +45,8 @@ export const DocumentRepositoryLive = Layer.effect(
               originalName: payload.originalName,
               mimeType: payload.mimeType,
               size: payload.size,
-              path: payload.path,
+              path: payload.path || undefined,
+              status: (payload.status as "DRAFT" | "PUBLISHED") || "DRAFT",
               uploadedBy: payload.uploadedBy,
             }),
           catch: (error) => {
@@ -97,7 +98,9 @@ export const DocumentRepositoryLive = Layer.effect(
               originalName: payload.originalName,
               mimeType: payload.mimeType,
               size: payload.size,
-              path: payload.path,
+              path: payload.path || undefined,
+              contentRef: payload.contentRef || undefined,
+              checksum: payload.checksum || undefined,
               versionNumber: payload.versionNumber,
               uploadedBy: payload.uploadedBy,
             }),
@@ -163,6 +166,37 @@ export const DocumentRepositoryLive = Layer.effect(
 
         return Option.fromNullable(version as unknown as DocumentVersion);
       });
+
+    const findVersionByChecksum: DocumentRepository["findVersionByChecksum"] = (
+      checksum
+    ) =>
+      Effect.gen(function* () {
+        const version = yield* Effect.tryPromise({
+          try: () =>
+            db.query.documentVersions.findFirst({
+              where: eq(documentVersions.checksum, checksum),
+            }),
+          catch: () =>
+            new DocumentConstraintError({ message: "Database error" }),
+        });
+
+        return Option.fromNullable(version as unknown as DocumentVersion);
+      });
+
+    const findVersionByContentRef: DocumentRepository["findVersionByContentRef"] =
+      (contentRef) =>
+        Effect.gen(function* () {
+          const version = yield* Effect.tryPromise({
+            try: () =>
+              db.query.documentVersions.findFirst({
+                where: eq(documentVersions.contentRef, contentRef),
+              }),
+            catch: () =>
+              new DocumentConstraintError({ message: "Database error" }),
+          });
+
+          return Option.fromNullable(version as unknown as DocumentVersion);
+        });
 
     const getLatestVersion: DocumentRepository["getLatestVersion"] = (
       documentId
@@ -427,6 +461,49 @@ export const DocumentRepositoryLive = Layer.effect(
         return updated as unknown as Document;
       });
 
+    const updateVersion: DocumentRepository["updateVersion"] = (id, payload) =>
+      Effect.gen(function* () {
+        // Prepare update object
+        const updates: any = {};
+        if (payload.path !== undefined) updates.path = payload.path;
+        if (payload.contentRef !== undefined)
+          updates.contentRef = payload.contentRef;
+        if (payload.checksum !== undefined) updates.checksum = payload.checksum;
+
+        yield* Effect.tryPromise({
+          try: () =>
+            db
+              .update(documentVersions)
+              .set(updates)
+              .where(eq(documentVersions.id, id)),
+          catch: () =>
+            new DocumentConstraintError({ message: "Database error" }),
+        });
+
+        const updated = yield* Effect.tryPromise({
+          try: () =>
+            db.query.documentVersions.findFirst({
+              where: eq(documentVersions.id, id),
+            }),
+          catch: () =>
+            new DocumentNotFoundError({
+              documentId: "" as DocumentId, // We don't have documentId here
+              message: "Version not found",
+            }),
+        });
+
+        if (!updated) {
+          return yield* Effect.fail(
+            new DocumentNotFoundError({
+              documentId: "" as DocumentId,
+              message: "Version not found",
+            })
+          );
+        }
+
+        return updated as unknown as DocumentVersion;
+      });
+
     const deleteDocument: DocumentRepository["deleteDocument"] = (id) =>
       Effect.gen(function* () {
         const result = yield* Effect.tryPromise({
@@ -465,12 +542,15 @@ export const DocumentRepositoryLive = Layer.effect(
       createVersion,
       findDocument,
       findVersionById,
+      findVersionByChecksum,
+      findVersionByContentRef,
       getLatestVersion,
       listVersions,
       listByUser,
       listAll,
       search,
       updateDocument,
+      updateVersion,
       deleteDocument,
       addAudit,
     } satisfies DocumentRepository;

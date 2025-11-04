@@ -302,7 +302,7 @@ export const DownloadTokenWorkflowLive = Layer.effect(
             filename: version.filename,
             mimeType: version.mimeType,
             size: version.size,
-            path: version.path,
+            path: version.path || "", // Handle optional path
           };
         }),
         { token: query.token }

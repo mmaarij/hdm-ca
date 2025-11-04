@@ -13,6 +13,8 @@ import {
   MimeType,
   FileSize,
   VersionNumber,
+  DocumentStatus,
+  Checksum,
 } from "../../../domain/document/value-object";
 import { DateTime } from "../../../domain/refined/date-time";
 
@@ -25,6 +27,7 @@ export const DocumentResponse = S.Struct({
   originalName: Filename,
   mimeType: MimeType,
   size: FileSize,
+  status: DocumentStatus, // DRAFT or PUBLISHED
   uploadedBy: UserId,
   createdAt: S.optional(DateTime),
   updatedAt: S.optional(DateTime),
@@ -76,6 +79,33 @@ export const UploadDocumentResponse = S.Struct({
 export type UploadDocumentResponse = S.Schema.Type<
   typeof UploadDocumentResponse
 >;
+
+/**
+ * Initiate Upload Response
+ */
+export const InitiateUploadResponse = S.Struct({
+  documentId: DocumentId,
+  uploadUrl: S.String, // Pre-signed URL for upload
+  checksum: Checksum, // Echo back for confirmation
+  expiresAt: DateTime, // URL expiration time
+});
+
+export type InitiateUploadResponse = S.Schema.Type<
+  typeof InitiateUploadResponse
+>;
+
+/**
+ * Confirm Upload Response
+ */
+export const ConfirmUploadResponse = S.Struct({
+  documentId: DocumentId,
+  versionId: DocumentVersionId,
+  status: DocumentStatus,
+  document: DocumentResponse,
+  version: DocumentVersionResponse,
+});
+
+export type ConfirmUploadResponse = S.Schema.Type<typeof ConfirmUploadResponse>;
 
 /**
  * Paginated Documents Response

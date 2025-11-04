@@ -28,6 +28,11 @@ import type {
   SearchDocumentsQuery,
   UpdateDocumentCommand,
   DeleteDocumentCommand,
+  InitiateUploadCommand,
+  ConfirmUploadCommand,
+  CreateDocumentMetadataCommand,
+  PublishDocumentCommand,
+  UnpublishDocumentCommand,
 } from "../dtos/document/request.dto";
 import type {
   UploadDocumentResponse,
@@ -35,6 +40,8 @@ import type {
   PaginatedDocumentsResponse,
   SearchDocumentsResponse,
   DocumentResponse,
+  InitiateUploadResponse,
+  ConfirmUploadResponse,
 } from "../dtos/document/response.dto";
 
 /**
@@ -47,6 +54,13 @@ export interface StorageService {
     tempPath: string,
     filename: string
   ) => Effect.Effect<string, Error>; // Returns final storage path
+  readonly generatePresignedUploadUrl: (
+    filename: string,
+    mimeType: string
+  ) => Effect.Effect<
+    { url: string; contentRef: string; expiresAt: Date },
+    Error
+  >; // Pre-signed URL for direct upload
   readonly deleteFile: (path: string) => Effect.Effect<void, Error>;
 }
 
@@ -59,7 +73,51 @@ export const StorageServiceTag = Context.GenericTag<StorageService>(
  */
 export interface DocumentWorkflow {
   /**
-   * Upload a new document
+   * Initiate two-phase upload (Phase 1: Create document record + pre-signed URL)
+   */
+  readonly initiateUpload: (
+    command: InitiateUploadCommand
+  ) => Effect.Effect<InitiateUploadResponse, Error>;
+
+  /**
+   * Confirm upload (Phase 2: Verify checksum + persist document)
+   */
+  readonly confirmUpload: (
+    command: ConfirmUploadCommand
+  ) => Effect.Effect<
+    ConfirmUploadResponse,
+    NotFoundError | InsufficientPermissionError | Error
+  >;
+
+  /**
+   * Create document metadata without immediate file upload
+   */
+  readonly createDocumentMetadata: (
+    command: CreateDocumentMetadataCommand
+  ) => Effect.Effect<DocumentResponse, Error>;
+
+  /**
+   * Publish document (change status from DRAFT to PUBLISHED)
+   */
+  readonly publishDocument: (
+    command: PublishDocumentCommand
+  ) => Effect.Effect<
+    DocumentResponse,
+    NotFoundError | InsufficientPermissionError | Error
+  >;
+
+  /**
+   * Unpublish document (change status from PUBLISHED to DRAFT)
+   */
+  readonly unpublishDocument: (
+    command: UnpublishDocumentCommand
+  ) => Effect.Effect<
+    DocumentResponse,
+    NotFoundError | InsufficientPermissionError | Error
+  >;
+
+  /**
+   * Upload a new document (DEPRECATED - Use two-phase upload instead)
    */
   readonly uploadDocument: (
     command: UploadDocumentCommand
@@ -130,6 +188,389 @@ export const DocumentWorkflowLive = Layer.effect(
     const permissionRepo = yield* PermissionRepositoryTag;
     const storageService = yield* StorageServiceTag;
 
+    const initiateUpload: DocumentWorkflow["initiateUpload"] = (command) =>
+      withUseCaseLogging(
+        "InitiateUpload",
+        Effect.gen(function* () {
+          // Check for duplicate checksum (idempotency)
+          const existingVersionOpt = yield* documentRepo.findVersionByChecksum(
+            command.checksum
+          );
+
+          if (Option.isSome(existingVersionOpt)) {
+            // Document with this checksum already exists, return existing record
+            const existingVersion = existingVersionOpt.value;
+            const documentOpt = yield* documentRepo.findDocument(
+              existingVersion.documentId
+            );
+
+            if (Option.isSome(documentOpt)) {
+              // Return existing upload URL (or indicate upload already complete)
+              return {
+                documentId: documentOpt.value.id,
+                uploadUrl: "", // Empty since already uploaded
+                checksum: command.checksum,
+                expiresAt: new Date() as any, // Already expired
+              };
+            }
+          }
+
+          // Generate pre-signed upload URL
+          const { url, contentRef, expiresAt } =
+            yield* storageService.generatePresignedUploadUrl(
+              command.filename,
+              command.mimeType
+            );
+
+          // Create document in DRAFT status (without file path yet)
+          const document = yield* documentRepo.createDocument({
+            filename: command.filename,
+            originalName: command.originalName,
+            mimeType: command.mimeType,
+            size: command.size,
+            status: "DRAFT" as any,
+            uploadedBy: command.uploadedBy,
+          });
+
+          // Create initial version (without path/content yet)
+          yield* documentRepo.createVersion({
+            documentId: document.id,
+            filename: command.filename,
+            originalName: command.originalName,
+            mimeType: command.mimeType,
+            size: command.size,
+            checksum: command.checksum,
+            contentRef: contentRef as any,
+            versionNumber: 1 as any,
+            uploadedBy: command.uploadedBy,
+          });
+
+          // Add audit log
+          yield* documentRepo.addAudit({
+            documentId: document.id,
+            action: "upload_initiated",
+            performedBy: command.uploadedBy,
+            details: `Upload initiated with checksum ${command.checksum}`,
+          });
+
+          return {
+            documentId: document.id,
+            uploadUrl: url,
+            checksum: command.checksum,
+            expiresAt: expiresAt as any,
+          };
+        }),
+        { uploadedBy: command.uploadedBy }
+      );
+
+    const confirmUpload: DocumentWorkflow["confirmUpload"] = (command) =>
+      withUseCaseLogging(
+        "ConfirmUpload",
+        Effect.gen(function* () {
+          // Get document
+          const documentOpt = yield* documentRepo.findDocument(
+            command.documentId
+          );
+          if (Option.isNone(documentOpt)) {
+            return yield* Effect.fail(
+              new NotFoundError({
+                entityType: "Document",
+                id: command.documentId,
+                message: `Document with ID ${command.documentId} not found`,
+              })
+            );
+          }
+
+          const document = documentOpt.value;
+
+          // Check permissions (only uploader can confirm)
+          if (document.uploadedBy !== command.userId) {
+            return yield* Effect.fail(
+              new InsufficientPermissionError({
+                message: "Only the uploader can confirm upload",
+                requiredPermission: "WRITE",
+                resource: `Document:${command.documentId}`,
+              })
+            );
+          }
+
+          // Get latest version and verify checksum
+          const latestVersionOpt = yield* documentRepo.getLatestVersion(
+            command.documentId
+          );
+
+          if (Option.isNone(latestVersionOpt)) {
+            return yield* Effect.fail(
+              new Error("No version found for document")
+            );
+          }
+
+          const latestVersion = latestVersionOpt.value;
+
+          if (latestVersion.checksum !== command.checksum) {
+            return yield* Effect.fail(
+              new Error(
+                `Checksum mismatch: expected ${latestVersion.checksum}, got ${command.checksum}`
+              )
+            );
+          }
+
+          // Update document with storage path
+          const updatedDocument = yield* documentRepo.updateDocument(
+            command.documentId,
+            {
+              path: command.storagePath,
+            }
+          );
+
+          // Update version with storage path
+          const updatedVersion = yield* documentRepo.updateVersion(
+            latestVersion.id,
+            {
+              path: command.storagePath,
+            }
+          );
+
+          // Add audit log
+          yield* documentRepo.addAudit({
+            documentId: command.documentId,
+            action: "upload_confirmed",
+            performedBy: command.userId,
+            details: "Upload confirmed and file persisted",
+          });
+
+          return {
+            documentId: updatedDocument.id,
+            versionId: updatedVersion.id,
+            status: updatedDocument.status,
+            document: {
+              id: updatedDocument.id,
+              filename: updatedDocument.filename,
+              originalName: updatedDocument.originalName,
+              mimeType: updatedDocument.mimeType,
+              size: updatedDocument.size,
+              status: updatedDocument.status,
+              uploadedBy: updatedDocument.uploadedBy,
+              createdAt: updatedDocument.createdAt,
+              updatedAt: updatedDocument.updatedAt,
+            },
+            version: {
+              id: updatedVersion.id,
+              documentId: updatedVersion.documentId,
+              filename: updatedVersion.filename,
+              originalName: updatedVersion.originalName,
+              mimeType: updatedVersion.mimeType,
+              size: updatedVersion.size,
+              versionNumber: updatedVersion.versionNumber,
+              uploadedBy: updatedVersion.uploadedBy,
+              createdAt: updatedVersion.createdAt,
+            },
+          };
+        }),
+        { userId: command.userId, documentId: command.documentId }
+      );
+
+    const createDocumentMetadata: DocumentWorkflow["createDocumentMetadata"] = (
+      command
+    ) =>
+      withUseCaseLogging(
+        "CreateDocumentMetadata",
+        Effect.gen(function* () {
+          // Create document in DRAFT status without file path
+          const document = yield* documentRepo.createDocument({
+            filename: command.filename,
+            originalName: command.originalName,
+            mimeType: command.mimeType,
+            size: command.size,
+            status: "DRAFT" as any,
+            uploadedBy: command.uploadedBy,
+          });
+
+          // Add audit log
+          yield* documentRepo.addAudit({
+            documentId: document.id,
+            action: "metadata_created",
+            performedBy: command.uploadedBy,
+            details: "Document metadata created without file upload",
+          });
+
+          return {
+            id: document.id,
+            filename: document.filename,
+            originalName: document.originalName,
+            mimeType: document.mimeType,
+            size: document.size,
+            status: document.status,
+            uploadedBy: document.uploadedBy,
+            createdAt: document.createdAt,
+            updatedAt: document.updatedAt,
+          };
+        }),
+        { uploadedBy: command.uploadedBy }
+      );
+
+    const publishDocument: DocumentWorkflow["publishDocument"] = (command) =>
+      withUseCaseLogging(
+        "PublishDocument",
+        Effect.gen(function* () {
+          // Get document
+          const documentOpt = yield* documentRepo.findDocument(
+            command.documentId
+          );
+          if (Option.isNone(documentOpt)) {
+            return yield* Effect.fail(
+              new NotFoundError({
+                entityType: "Document",
+                id: command.documentId,
+                message: `Document with ID ${command.documentId} not found`,
+              })
+            );
+          }
+
+          const document = documentOpt.value;
+
+          // Get user
+          const userOpt = yield* userRepo.findById(command.userId);
+          if (Option.isNone(userOpt)) {
+            return yield* Effect.fail(
+              new NotFoundError({
+                entityType: "User",
+                id: command.userId,
+                message: `User with ID ${command.userId} not found`,
+              })
+            );
+          }
+
+          const user = userOpt.value;
+
+          // Check permissions
+          const permissions = yield* permissionRepo.findByDocument(
+            command.documentId
+          );
+
+          if (!canWrite(user, document, permissions)) {
+            return yield* Effect.fail(
+              new InsufficientPermissionError({
+                message: "Insufficient permission to publish document",
+                requiredPermission: "WRITE",
+                resource: `Document:${command.documentId}`,
+              })
+            );
+          }
+
+          // Update document status to PUBLISHED
+          const updatedDocument = yield* documentRepo.updateDocument(
+            command.documentId,
+            {
+              status: "PUBLISHED" as any,
+            }
+          );
+
+          // Add audit log
+          yield* documentRepo.addAudit({
+            documentId: command.documentId,
+            action: "published",
+            performedBy: command.userId,
+            details: "Document published",
+          });
+
+          return {
+            id: updatedDocument.id,
+            filename: updatedDocument.filename,
+            originalName: updatedDocument.originalName,
+            mimeType: updatedDocument.mimeType,
+            size: updatedDocument.size,
+            status: updatedDocument.status,
+            uploadedBy: updatedDocument.uploadedBy,
+            createdAt: updatedDocument.createdAt,
+            updatedAt: updatedDocument.updatedAt,
+          };
+        }),
+        { userId: command.userId, documentId: command.documentId }
+      );
+
+    const unpublishDocument: DocumentWorkflow["unpublishDocument"] = (
+      command
+    ) =>
+      withUseCaseLogging(
+        "UnpublishDocument",
+        Effect.gen(function* () {
+          // Get document
+          const documentOpt = yield* documentRepo.findDocument(
+            command.documentId
+          );
+          if (Option.isNone(documentOpt)) {
+            return yield* Effect.fail(
+              new NotFoundError({
+                entityType: "Document",
+                id: command.documentId,
+                message: `Document with ID ${command.documentId} not found`,
+              })
+            );
+          }
+
+          const document = documentOpt.value;
+
+          // Get user
+          const userOpt = yield* userRepo.findById(command.userId);
+          if (Option.isNone(userOpt)) {
+            return yield* Effect.fail(
+              new NotFoundError({
+                entityType: "User",
+                id: command.userId,
+                message: `User with ID ${command.userId} not found`,
+              })
+            );
+          }
+
+          const user = userOpt.value;
+
+          // Check permissions
+          const permissions = yield* permissionRepo.findByDocument(
+            command.documentId
+          );
+
+          if (!canWrite(user, document, permissions)) {
+            return yield* Effect.fail(
+              new InsufficientPermissionError({
+                message: "Insufficient permission to unpublish document",
+                requiredPermission: "WRITE",
+                resource: `Document:${command.documentId}`,
+              })
+            );
+          }
+
+          // Update document status to DRAFT
+          const updatedDocument = yield* documentRepo.updateDocument(
+            command.documentId,
+            {
+              status: "DRAFT" as any,
+            }
+          );
+
+          // Add audit log
+          yield* documentRepo.addAudit({
+            documentId: command.documentId,
+            action: "unpublished",
+            performedBy: command.userId,
+            details: "Document unpublished",
+          });
+
+          return {
+            id: updatedDocument.id,
+            filename: updatedDocument.filename,
+            originalName: updatedDocument.originalName,
+            mimeType: updatedDocument.mimeType,
+            size: updatedDocument.size,
+            status: updatedDocument.status,
+            uploadedBy: updatedDocument.uploadedBy,
+            createdAt: updatedDocument.createdAt,
+            updatedAt: updatedDocument.updatedAt,
+          };
+        }),
+        { userId: command.userId, documentId: command.documentId }
+      );
+
     const uploadDocument: DocumentWorkflow["uploadDocument"] = (command) =>
       withUseCaseLogging(
         "UploadDocument",
@@ -147,6 +588,7 @@ export const DocumentWorkflowLive = Layer.effect(
             mimeType: command.mimeType,
             size: command.size,
             path: storagePath as any,
+            status: "DRAFT" as any,
             uploadedBy: command.uploadedBy,
           });
 
@@ -179,6 +621,7 @@ export const DocumentWorkflowLive = Layer.effect(
               originalName: document.originalName,
               mimeType: document.mimeType,
               size: document.size,
+              status: document.status,
               uploadedBy: document.uploadedBy,
               createdAt: document.createdAt,
               updatedAt: document.updatedAt,
@@ -260,6 +703,7 @@ export const DocumentWorkflowLive = Layer.effect(
               originalName: document.originalName,
               mimeType: document.mimeType,
               size: document.size,
+              status: document.status,
               uploadedBy: document.uploadedBy,
               createdAt: document.createdAt,
               updatedAt: document.updatedAt,
@@ -302,6 +746,7 @@ export const DocumentWorkflowLive = Layer.effect(
                 originalName: dwv.document.originalName,
                 mimeType: dwv.document.mimeType,
                 size: dwv.document.size,
+                status: dwv.document.status,
                 uploadedBy: dwv.document.uploadedBy,
                 createdAt: dwv.document.createdAt,
                 updatedAt: dwv.document.updatedAt,
@@ -374,6 +819,7 @@ export const DocumentWorkflowLive = Layer.effect(
                 originalName: dwv.document.originalName,
                 mimeType: dwv.document.mimeType,
                 size: dwv.document.size,
+                status: dwv.document.status,
                 uploadedBy: dwv.document.uploadedBy,
                 createdAt: dwv.document.createdAt,
                 updatedAt: dwv.document.updatedAt,
@@ -547,6 +993,7 @@ export const DocumentWorkflowLive = Layer.effect(
             originalName: updatedDocument.originalName,
             mimeType: updatedDocument.mimeType,
             size: updatedDocument.size,
+            status: updatedDocument.status,
             uploadedBy: updatedDocument.uploadedBy,
             createdAt: updatedDocument.createdAt,
             updatedAt: updatedDocument.updatedAt,
@@ -604,13 +1051,17 @@ export const DocumentWorkflowLive = Layer.effect(
             );
           }
 
-          // Delete file from storage
-          yield* storageService.deleteFile(document.path);
+          // Delete file from storage (if exists)
+          if (document.path) {
+            yield* storageService.deleteFile(document.path);
+          }
 
           // Delete all versions' files
           const versions = yield* documentRepo.listVersions(command.documentId);
           for (const version of versions) {
-            yield* storageService.deleteFile(version.path);
+            if (version.path) {
+              yield* storageService.deleteFile(version.path);
+            }
           }
 
           // Delete document (cascade will delete versions and permissions)
@@ -628,6 +1079,11 @@ export const DocumentWorkflowLive = Layer.effect(
       );
 
     return {
+      initiateUpload,
+      confirmUpload,
+      createDocumentMetadata,
+      publishDocument,
+      unpublishDocument,
       uploadDocument,
       getDocument,
       listDocuments,

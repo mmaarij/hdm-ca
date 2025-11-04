@@ -71,17 +71,44 @@ export const FileSize = S.Number.pipe(
 export type FileSize = S.Schema.Type<typeof FileSize>;
 
 /**
- * Version number schema
+ * Version number (positive integer)
  */
 export const VersionNumber = S.Number.pipe(
+  S.positive(),
   S.int(),
-  S.filter((value) => value >= 1, {
-    message: () => "Version number must be at least 1",
-  }),
   S.brand("VersionNumber")
 );
 
 export type VersionNumber = S.Schema.Type<typeof VersionNumber>;
+
+/**
+ * Document Status
+ */
+export const DocumentStatus = S.Literal("DRAFT", "PUBLISHED");
+export type DocumentStatus = S.Schema.Type<typeof DocumentStatus>;
+
+/**
+ * Content Reference (unique identifier for file content)
+ */
+export const ContentRef = S.String.pipe(
+  S.minLength(1),
+  S.maxLength(255),
+  S.brand("ContentRef")
+);
+
+export type ContentRef = S.Schema.Type<typeof ContentRef>;
+
+/**
+ * Checksum (SHA-256 hash of file content)
+ */
+export const Checksum = S.String.pipe(
+  S.minLength(64),
+  S.maxLength(64),
+  S.pattern(/^[a-f0-9]{64}$/),
+  S.brand("Checksum")
+);
+
+export type Checksum = S.Schema.Type<typeof Checksum>;
 
 /** Constructors */
 export const makeFilename = (input: unknown) =>
@@ -94,3 +121,9 @@ export const makeFileSize = (input: unknown) =>
   S.decodeUnknown(FileSize)(input);
 export const makeVersionNumber = (input: unknown) =>
   S.decodeUnknown(VersionNumber)(input);
+export const makeDocumentStatus = (input: unknown) =>
+  S.decodeUnknown(DocumentStatus)(input);
+export const makeContentRef = (input: unknown) =>
+  S.decodeUnknown(ContentRef)(input);
+export const makeChecksum = (input: unknown) =>
+  S.decodeUnknown(Checksum)(input);

@@ -78,6 +78,7 @@ export function makeTestDocument(overrides?: Partial<Document>): Document {
     mimeType: "application/pdf" as any,
     size: 1024 as any,
     path: `/uploads/${id}.pdf` as any,
+    status: "DRAFT" as any,
     uploadedBy: userId,
     createdAt: new Date() as any,
     updatedAt: new Date() as any,

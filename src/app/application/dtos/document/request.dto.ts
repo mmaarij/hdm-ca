@@ -11,10 +11,62 @@ import {
   MimeType,
   FileSize,
   FilePath,
+  Checksum,
+  DocumentStatus,
 } from "../../../domain/document/value-object";
 
 /**
- * Upload Document Command
+ * Initiate Upload Command
+ *
+ * Creates a document record in DRAFT status and returns pre-signed upload URL.
+ * This is Phase 1 of the two-phase upload workflow.
+ */
+export const InitiateUploadCommand = S.Struct({
+  filename: Filename,
+  originalName: Filename,
+  mimeType: MimeType,
+  size: FileSize,
+  checksum: Checksum, // SHA-256 hash of file content for idempotency
+  uploadedBy: UserId,
+});
+
+export type InitiateUploadCommand = S.Schema.Type<typeof InitiateUploadCommand>;
+
+/**
+ * Confirm Upload Command
+ *
+ * Confirms that the file was successfully uploaded to storage.
+ * This is Phase 2 of the two-phase upload workflow.
+ */
+export const ConfirmUploadCommand = S.Struct({
+  documentId: DocumentId,
+  userId: UserId, // For permission checking
+  checksum: Checksum, // Must match the initial checksum
+  storagePath: FilePath, // Actual storage path after upload
+});
+
+export type ConfirmUploadCommand = S.Schema.Type<typeof ConfirmUploadCommand>;
+
+/**
+ * Create Document Metadata Command
+ *
+ * Creates a document record without immediate file upload (metadata-only).
+ * File can be uploaded later via initiate/confirm workflow.
+ */
+export const CreateDocumentMetadataCommand = S.Struct({
+  filename: Filename,
+  originalName: Filename,
+  mimeType: MimeType,
+  size: FileSize,
+  uploadedBy: UserId,
+});
+
+export type CreateDocumentMetadataCommand = S.Schema.Type<
+  typeof CreateDocumentMetadataCommand
+>;
+
+/**
+ * Upload Document Command (DEPRECATED - Use two-phase upload instead)
  *
  * File content is handled separately (e.g., multipart form data in HTTP layer)
  * This DTO captures metadata about the upload.
@@ -84,6 +136,30 @@ export const UpdateDocumentCommand = S.Struct({
 });
 
 export type UpdateDocumentCommand = S.Schema.Type<typeof UpdateDocumentCommand>;
+
+/**
+ * Publish Document Command
+ */
+export const PublishDocumentCommand = S.Struct({
+  documentId: DocumentId,
+  userId: UserId, // For permission checking
+});
+
+export type PublishDocumentCommand = S.Schema.Type<
+  typeof PublishDocumentCommand
+>;
+
+/**
+ * Unpublish Document Command
+ */
+export const UnpublishDocumentCommand = S.Struct({
+  documentId: DocumentId,
+  userId: UserId, // For permission checking
+});
+
+export type UnpublishDocumentCommand = S.Schema.Type<
+  typeof UnpublishDocumentCommand
+>;
 
 /**
  * Delete Document Command
