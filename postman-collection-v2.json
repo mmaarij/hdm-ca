@@ -1,11 +1,11 @@
 {
   "info": {
-    "_postman_id": "b4145eb7-6a70-42ad-857b-ac10062f6c22",
+    "_postman_id": "240cd42f-33cd-48fa-a6ba-572e330a0e98",
     "name": "HDM CA API Testing Suite",
     "description": "Comprehensive testing suite for HDM CA API with maximally simplified upload workflow.\n\n**Test Flow:**\n1. Setup & Authentication - Register and authenticate users\n2. Document Lifecycle - Single-step upload with auto-metadata extraction\n3. Permission Management - Grant, update, check, revoke\n4. Metadata Operations - Add, update, query metadata\n5. Download System - Generate links, validate tokens, download files\n6. Advanced Features - Search, admin operations, version management\n7. Security & Edge Cases - Validation and error handling\n\n**Test Users:**\n- Admin: admin@hdm.test / AdminPass123!\n- Owner: owner@hdm.test / OwnerPass123!\n- Collaborator: collab@hdm.test / CollabPass123!\n\n**Simplified Upload:**\n- Just send the file - filename, MIME type, and size are auto-detected\n- For new versions, include documentId\n- Automatic version incrementing\n- No manual metadata entry required\n\n**Usage:** Run collection with Collection Runner for full automated testing",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "48882079",
-    "_collection_link": "https://muhammad-maarij-5574753.postman.co/workspace/Muhammad-Maarij's-Workspace~69a6fe11-d883-49bd-80fa-22cb46b3bcc9/collection/48882079-b4145eb7-6a70-42ad-857b-ac10062f6c22?action=share&source=collection_link&creator=48882079"
+    "_collection_link": "https://muhammad-maarij-5574753.postman.co/workspace/Muhammad-Maarij's-Workspace~69a6fe11-d883-49bd-80fa-22cb46b3bcc9/collection/48882079-240cd42f-33cd-48fa-a6ba-572e330a0e98?action=share&source=collection_link&creator=48882079"
   },
   "item": [
     {
@@ -436,7 +436,9 @@
                   "console.log('� Version 2 uploaded');",
                   "console.log('   Version 2 ID: ' + pm.environment.get('ownerVersion2Id'));"
                 ],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -455,7 +457,7 @@
                   "key": "file",
                   "description": "Upload updated file - metadata auto-detected from file",
                   "type": "file",
-                  "src": []
+                  "src": "postman-cloud:///1f0a0710-30fe-4f90-b502-6f0e753c8c25"
                 },
                 {
                   "key": "documentId",
@@ -924,6 +926,58 @@
           "response": []
         },
         {
+          "name": "Collab: Upload New Version with WRITE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Collaborator uploaded new version with WRITE permission', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.document).to.exist;",
+                  "    pm.expect(body.version.versionNumber).to.eql(3);",
+                  "});",
+                  "console.log('📤 Collaborator uploaded version 3 with WRITE permission');"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{collabToken}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "postman-cloud:///1f0ba5cd-b4c3-4e90-91aa-ddeb9b0a4809"
+                },
+                {
+                  "key": "documentId",
+                  "value": "{{ownerDocId}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/documents",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents"]
+            }
+          },
+          "response": []
+        },
+        {
           "name": "List User's Permissions",
           "event": [
             {
@@ -1122,12 +1176,14 @@
                   "pm.test('✅ Metadata retrieved', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.items).to.be.an('array');",
-                  "    pm.expect(body.items.length).to.be.at.least(2);",
+                  "    pm.expect(body.metadata).to.be.an('array');",
+                  "    pm.expect(body.metadata.length).to.be.at.least(2);",
                   "});",
                   "console.log('📋 All metadata retrieved');"
                 ],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -1476,11 +1532,13 @@
                   "pm.test('✅ Admin can see all documents', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.items).to.be.an('array');",
+                  "    pm.expect(body.documents).to.be.an('array');",
                   "});",
                   "console.log('👑 Admin viewing all documents');"
                 ],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -1735,10 +1793,10 @@
       ]
     },
     {
-      "name": "8. Cleanup (Optional)",
+      "name": "8. Cleanup",
       "item": [
         {
-          "name": "Delete Test Document",
+          "name": "Owner Delete Document",
           "event": [
             {
               "listen": "test",
@@ -1770,15 +1828,23 @@
           "response": []
         },
         {
-          "name": "Delete Test Users (Admin)",
+          "name": "List Owner's Documents (Empty)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "console.log('🧹 Cleanup complete - Test users would be deleted in production');"
+                  "pm.test('✅ Owner documents listed', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.documents).to.be.an('array');",
+                  "    pm.expect(body.documents.length).to.be.at.least(0);",
+                  "});",
+                  "console.log('📚 Owner documents listed');"
                 ],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -1787,13 +1853,13 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{adminToken}}"
+                "value": "Bearer {{ownerToken}}"
               }
             ],
             "url": {
-              "raw": "{{BASE_URL}}/health",
+              "raw": "{{BASE_URL}}/documents",
               "host": ["{{BASE_URL}}"],
-              "path": ["health"]
+              "path": ["documents"]
             }
           },
           "response": []
