@@ -14,6 +14,7 @@ import {
 import { NotFoundError, ForbiddenError } from "../../domain/shared/base.errors";
 import { InvalidCredentialsError } from "../utils/errors";
 import { withUseCaseLogging } from "../utils/logging";
+import { withPerformanceTracking } from "../utils/performance";
 import {
   PasswordHasherPort,
   PasswordHasherPortTag,
@@ -99,85 +100,91 @@ export const UserWorkflowLive = Layer.effect(
     const jwtService = yield* JwtPortTag;
 
     const registerUser: UserWorkflow["registerUser"] = (command) =>
-      withUseCaseLogging(
+      withPerformanceTracking(
         "RegisterUser",
-        Effect.gen(function* () {
-          // Check if user already exists
-          const existingUser = yield* userRepo.findByEmail(command.email);
-          if (Option.isSome(existingUser)) {
-            return yield* Effect.fail(
-              new UserAlreadyExistsError({
-                email: command.email,
-                message: `User with email ${command.email} already exists`,
-              })
-            );
-          }
+        withUseCaseLogging(
+          "RegisterUser",
+          Effect.gen(function* () {
+            // Check if user already exists
+            const existingUser = yield* userRepo.findByEmail(command.email);
+            if (Option.isSome(existingUser)) {
+              return yield* Effect.fail(
+                new UserAlreadyExistsError({
+                  email: command.email,
+                  message: `User with email ${command.email} already exists`,
+                })
+              );
+            }
 
-          // Hash password
-          const password = yield* makePassword(command.password);
-          const hashedPassword = yield* passwordHasher.hash(password);
+            // Hash password
+            const password = yield* makePassword(command.password);
+            const hashedPassword = yield* passwordHasher.hash(password);
 
-          // Create user
-          const user = yield* userRepo.create({
-            email: command.email,
-            password: hashedPassword,
-            role: command.role,
-          });
+            // Create user
+            const user = yield* userRepo.create({
+              email: command.email,
+              password: hashedPassword,
+              role: command.role,
+            });
 
-          const { password: _, ...userResponse } = user;
-          return {
-            user: userResponse,
-          };
-        }),
-        { email: command.email }
+            const { password: _, ...userResponse } = user;
+            return {
+              user: userResponse,
+            };
+          }),
+          { email: command.email }
+        )
       );
 
     const loginUser: UserWorkflow["loginUser"] = (command) =>
-      withUseCaseLogging(
+      withPerformanceTracking(
         "LoginUser",
-        Effect.gen(function* () {
-          // Find user by email
-          const userOpt = yield* userRepo.findByEmail(command.email);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new InvalidCredentialsError({
-                message: "Invalid email or password",
-              })
+        withUseCaseLogging(
+          "LoginUser",
+          Effect.gen(function* () {
+            // Find user by email
+            const userOpt = yield* userRepo.findByEmail(command.email);
+            if (Option.isNone(userOpt)) {
+              return yield* Effect.fail(
+                new InvalidCredentialsError({
+                  message: "Invalid email or password",
+                })
+              );
+            }
+
+            const user = userOpt.value;
+
+            // Verify password
+            const password = yield* makePassword(command.password);
+            const isValidPassword = yield* passwordHasher.verify(
+              password,
+              user.password
             );
-          }
 
-          const user = userOpt.value;
+            if (!isValidPassword) {
+              return yield* Effect.fail(
+                new InvalidCredentialsError({
+                  message: "Invalid email or password",
+                })
+              );
+            }
 
-          // Verify password
-          const password = yield* makePassword(command.password);
-          const isValidPassword = yield* passwordHasher.verify(
-            password,
-            user.password
-          );
+            // Generate JWT token
+            const { token, expiresIn } = yield* jwtService.sign({
+              userId: user.id,
+              email: user.email,
+              role: user.role,
+            });
 
-          if (!isValidPassword) {
-            return yield* Effect.fail(
-              new InvalidCredentialsError({
-                message: "Invalid email or password",
-              })
-            );
-          }
-
-          // Generate JWT token
-          const { token, expiresIn } = yield* jwtService.sign({
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-          });
-
-          const { password: _, ...userResponse } = user;
-          return {
-            user: userResponse,
-            token,
-            expiresIn,
-          };
-        }),
-        { email: command.email }
+            const { password: _, ...userResponse } = user;
+            return {
+              user: userResponse,
+              token,
+              expiresIn,
+            };
+          }),
+          { email: command.email }
+        )
       );
 
     const getUserProfile: UserWorkflow["getUserProfile"] = (query) =>

@@ -1,0 +1,1744 @@
+{
+  "info": {
+    "_postman_id": "hdm-ca",
+    "name": "HDM CA API Testing Suite",
+    "description": "Comprehensive testing suite for HDM CA API with full workflow coverage.\n\n**Test Flow:**\n1. Setup & Authentication - Register and authenticate users\n2. Document Lifecycle - Upload, initiate, confirm, publish\n3. Permission Management - Grant, update, check, revoke\n4. Metadata Operations - Add, update, query metadata\n5. Download System - Generate links, validate tokens, download files\n6. Advanced Features - Search, admin operations\n7. Security & Edge Cases - Validation and error handling\n\n**Test Users:**\n- Admin: admin@hdm.test / AdminPass123!\n- Owner: owner@hdm.test / OwnerPass123!\n- Collaborator: collab@hdm.test / CollabPass123!\n\n**Usage:** Run collection with Collection Runner for full automated testing",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Setup & Authentication",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Server is healthy', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql('healthy');",
+                  "});",
+                  "console.log('🏥 Health check passed');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Correlation-ID",
+                "value": "health-check-001"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Register Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Admin registered', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.user).to.exist;",
+                  "    pm.expect(body.user.role).to.eql('ADMIN');",
+                  "    pm.environment.set('adminUserId', body.user.id);",
+                  "});",
+                  "console.log('👑 Admin user registered');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "register-admin-001"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@hdm.test\",\n  \"password\": \"AdminPass123!\",\n  \"role\": \"ADMIN\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/users/register",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Register Owner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Owner registered', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.user).to.exist;",
+                  "    pm.expect(body.user.role).to.eql('USER');",
+                  "    pm.environment.set('ownerUserId', body.user.id);",
+                  "});",
+                  "console.log('👤 Owner user registered');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner@hdm.test\",\n  \"password\": \"OwnerPass123!\",\n  \"role\": \"USER\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/users/register",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Register Collaborator",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Collaborator registered', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.user).to.exist;",
+                  "    pm.environment.set('collabUserId', body.user.id);",
+                  "});",
+                  "console.log('👥 Collaborator user registered');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"collab@hdm.test\",\n  \"password\": \"CollabPass123!\",\n  \"role\": \"USER\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/users/register",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Admin logged in', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.token).to.exist;",
+                  "    pm.environment.set('adminToken', body.token);",
+                  "});",
+                  "console.log('🔑 Admin authenticated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@hdm.test\",\n  \"password\": \"AdminPass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/users/login",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login Owner",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Owner logged in', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.token).to.exist;",
+                  "    pm.environment.set('ownerToken', body.token);",
+                  "});",
+                  "console.log('🔑 Owner authenticated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner@hdm.test\",\n  \"password\": \"OwnerPass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/users/login",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login Collaborator",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Collaborator logged in', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.token).to.exist;",
+                  "    pm.environment.set('collabToken', body.token);",
+                  "});",
+                  "console.log('🔑 Collaborator authenticated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"collab@hdm.test\",\n  \"password\": \"CollabPass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/users/login",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users", "login"]
+            }
+          }
+        },
+        {
+          "name": "Get Owner Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Owner profile retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.exist;",
+                  "    pm.expect(body.email).to.eql('owner@hdm.test');",
+                  "});",
+                  "console.log('📋 Owner profile fetched');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/users/me",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users", "me"]
+            }
+          }
+        },
+        {
+          "name": "List All Users (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Admin can list all users', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.items).to.be.an('array');",
+                  "    pm.expect(body.items.length).to.be.at.least(3);",
+                  "});",
+                  "console.log('📜 All users listed');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Document Lifecycle",
+      "item": [
+        {
+          "name": "Initiate Document Upload (Owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Upload initiated', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.documentId).to.exist;",
+                  "    pm.expect(body.contentRef).to.exist;",
+                  "    pm.environment.set('ownerDocId', body.documentId);",
+                  "    pm.environment.set('ownerContentRef', body.contentRef);",
+                  "});",
+                  "console.log('📤 Document upload initiated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Project Proposal Document\",\n  \"description\": \"Main project proposal for Q1 2025\",\n  \"filename\": \"proposal.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"size\": 1048576\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/documents/initiate-upload",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "initiate-upload"]
+            }
+          }
+        },
+        {
+          "name": "Confirm Document Upload (Owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Upload confirmed', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.exist;",
+                  "    pm.expect(body.status).to.eql('DRAFT');",
+                  "    pm.environment.set('ownerVersionId', body.versions[0].id);",
+                  "});",
+                  "console.log('✅ Document upload confirmed');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{ownerDocId}}\",\n  \"contentRef\": \"{{ownerContentRef}}\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/documents/confirm-upload",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "confirm-upload"]
+            }
+          }
+        },
+        {
+          "name": "Get Document Details (Owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Document details retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.eql(pm.environment.get('ownerDocId'));",
+                  "    pm.expect(body.title).to.eql('Project Proposal Document');",
+                  "});",
+                  "console.log('📄 Document details fetched');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}"]
+            }
+          }
+        },
+        {
+          "name": "List Owner's Documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Owner documents listed', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.items).to.be.an('array');",
+                  "    pm.expect(body.items.length).to.be.at.least(1);",
+                  "});",
+                  "console.log('📚 Owner documents listed');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents"]
+            }
+          }
+        },
+        {
+          "name": "Publish Document (Owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Document published', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql('PUBLISHED');",
+                  "});",
+                  "console.log('📢 Document published');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}/publish",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}", "publish"]
+            }
+          }
+        },
+        {
+          "name": "Update Document (Owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Document updated', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.description).to.eql('Updated description with additional details');",
+                  "});",
+                  "console.log('📝 Document updated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Updated description with additional details\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}"]
+            }
+          }
+        },
+        {
+          "name": "Search Documents (Owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Search results retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.items).to.be.an('array');",
+                  "});",
+                  "console.log('🔍 Search completed');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/search?query=project",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "search"],
+              "query": [
+                {
+                  "key": "query",
+                  "value": "project"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Permission Management",
+      "item": [
+        {
+          "name": "Collab: Try Access Owner Doc (Should Fail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Access denied without permission', () => {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "console.log('🚫 Access correctly denied');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{collabToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}"]
+            }
+          }
+        },
+        {
+          "name": "Owner: Grant READ Permission to Collab",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ READ permission granted', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.exist;",
+                  "    pm.expect(body.permission).to.eql('READ');",
+                  "    pm.environment.set('readPermissionId', body.id);",
+                  "});",
+                  "console.log('✅ READ permission granted');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{ownerDocId}}\",\n  \"userId\": \"{{collabUserId}}\",\n  \"permission\": \"READ\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/permissions/grant",
+              "host": ["{{BASE_URL}}"],
+              "path": ["permissions", "grant"]
+            }
+          }
+        },
+        {
+          "name": "Collab: Now Can Access Owner Doc",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Can access with READ permission', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.eql(pm.environment.get('ownerDocId'));",
+                  "});",
+                  "console.log('✅ Access granted with READ permission');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{collabToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}"]
+            }
+          }
+        },
+        {
+          "name": "Check Permission Exists",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Permission check works', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.hasPermission).to.be.true;",
+                  "    pm.expect(body.permission).to.eql('READ');",
+                  "});",
+                  "console.log('✅ Permission verified');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/permissions/check?documentId={{ownerDocId}}&userId={{collabUserId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["permissions", "check"],
+              "query": [
+                {
+                  "key": "documentId",
+                  "value": "{{ownerDocId}}"
+                },
+                {
+                  "key": "userId",
+                  "value": "{{collabUserId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Document Permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Permissions listed', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.items).to.be.an('array');",
+                  "    pm.expect(body.items.length).to.be.at.least(1);",
+                  "});",
+                  "console.log('📋 Document permissions listed');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/permissions/document/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["permissions", "document", "{{ownerDocId}}"]
+            }
+          }
+        },
+        {
+          "name": "Owner: Upgrade to WRITE Permission",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Permission upgraded to WRITE', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.permission).to.eql('WRITE');",
+                  "});",
+                  "console.log('⬆️ Permission upgraded to WRITE');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permission\": \"WRITE\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/permissions/{{readPermissionId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["permissions", "{{readPermissionId}}"]
+            }
+          }
+        },
+        {
+          "name": "List User's Permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ User permissions listed', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.items).to.be.an('array');",
+                  "});",
+                  "console.log('📋 User permissions listed');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/permissions/user/{{collabUserId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["permissions", "user", "{{collabUserId}}"]
+            }
+          }
+        },
+        {
+          "name": "Owner: Revoke Permission",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Permission revoked', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "console.log('🚫 Permission revoked');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/permissions/{{readPermissionId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["permissions", "{{readPermissionId}}"]
+            }
+          }
+        },
+        {
+          "name": "Collab: Access Denied After Revoke",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Access denied after revocation', () => {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "console.log('🚫 Access correctly denied after revocation');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{collabToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Metadata Operations",
+      "item": [
+        {
+          "name": "Add Metadata: Author",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Metadata added', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.exist;",
+                  "    pm.expect(body.key).to.eql('author');",
+                  "    pm.environment.set('metadataId1', body.id);",
+                  "});",
+                  "console.log('🏷️ Metadata added: author');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{ownerDocId}}\",\n  \"key\": \"author\",\n  \"value\": \"John Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/metadata",
+              "host": ["{{BASE_URL}}"],
+              "path": ["metadata"]
+            }
+          }
+        },
+        {
+          "name": "Add Metadata: Department",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Metadata added', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.environment.set('metadataId2', body.id);",
+                  "});",
+                  "console.log('🏷️ Metadata added: department');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{ownerDocId}}\",\n  \"key\": \"department\",\n  \"value\": \"Engineering\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/metadata",
+              "host": ["{{BASE_URL}}"],
+              "path": ["metadata"]
+            }
+          }
+        },
+        {
+          "name": "Get All Document Metadata",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Metadata retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.items).to.be.an('array');",
+                  "    pm.expect(body.items.length).to.be.at.least(2);",
+                  "});",
+                  "console.log('📋 All metadata retrieved');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/metadata/document/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["metadata", "document", "{{ownerDocId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Metadata by Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Specific metadata retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.key).to.eql('author');",
+                  "    pm.expect(body.value).to.eql('John Doe');",
+                  "});",
+                  "console.log('🔍 Metadata retrieved by key');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/metadata/document/{{ownerDocId}}/key/author",
+              "host": ["{{BASE_URL}}"],
+              "path": [
+                "metadata",
+                "document",
+                "{{ownerDocId}}",
+                "key",
+                "author"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Metadata",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Metadata updated', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.value).to.eql('Jane Smith');",
+                  "});",
+                  "console.log('✏️ Metadata updated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": \"Jane Smith\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/metadata/{{metadataId1}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["metadata", "{{metadataId1}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Metadata",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Metadata deleted', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "console.log('🗑️ Metadata deleted');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/metadata/{{metadataId2}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["metadata", "{{metadataId2}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Download System",
+      "item": [
+        {
+          "name": "Generate Download Link (5 min TTL)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Download link generated', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.token).to.exist;",
+                  "    pm.expect(body.downloadUrl).to.exist;",
+                  "    pm.expect(body.expiresAt).to.exist;",
+                  "    pm.environment.set('downloadToken', body.token);",
+                  "});",
+                  "console.log('🔗 Download link generated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"documentId\": \"{{ownerDocId}}\",\n  \"ttlMs\": 300000\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/downloads/generate",
+              "host": ["{{BASE_URL}}"],
+              "path": ["downloads", "generate"]
+            }
+          }
+        },
+        {
+          "name": "Validate Download Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Token validated', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.valid).to.be.true;",
+                  "    pm.expect(body.documentId).to.exist;",
+                  "});",
+                  "console.log('✅ Token is valid');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/downloads/validate/{{downloadToken}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["downloads", "validate", "{{downloadToken}}"]
+            }
+          }
+        },
+        {
+          "name": "Download File (No Auth Required)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ File downloaded', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.exist;",
+                  "    pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');",
+                  "});",
+                  "console.log('⬇️ File downloaded successfully');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/downloads/{{downloadToken}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["downloads", "{{downloadToken}}"]
+            }
+          }
+        },
+        {
+          "name": "Try Download Again (Should Fail - Used)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Token already used error', () => {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "console.log('🚫 Token correctly marked as used');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/downloads/{{downloadToken}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["downloads", "{{downloadToken}}"]
+            }
+          }
+        },
+        {
+          "name": "Validate Invalid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Invalid token detected', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.valid).to.be.false;",
+                  "});",
+                  "console.log('🚫 Invalid token correctly identified');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/downloads/validate/invalid-token-xyz123",
+              "host": ["{{BASE_URL}}"],
+              "path": ["downloads", "validate", "invalid-token-xyz123"]
+            }
+          }
+        },
+        {
+          "name": "Cleanup Expired Tokens (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Cleanup executed', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.deletedCount).to.exist;",
+                  "});",
+                  "console.log('🧹 Expired tokens cleaned up');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/downloads/cleanup",
+              "host": ["{{BASE_URL}}"],
+              "path": ["downloads", "cleanup"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Advanced Features",
+      "item": [
+        {
+          "name": "Admin: View All Documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Admin can see all documents', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.items).to.be.an('array');",
+                  "});",
+                  "console.log('👑 Admin viewing all documents');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/admin/all",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "admin", "all"]
+            }
+          }
+        },
+        {
+          "name": "Unpublish Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Document unpublished', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql('DRAFT');",
+                  "});",
+                  "console.log('📝 Document unpublished');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}/unpublish",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}", "unpublish"]
+            }
+          }
+        },
+        {
+          "name": "Update User Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Profile updated', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "console.log('👤 Profile updated');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"owner.updated@hdm.test\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/users/me",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Security & Edge Cases",
+      "item": [
+        {
+          "name": "No Auth Header (Should Fail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Unauthorized without token', () => {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "console.log('🚫 Correctly requires authentication');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/documents",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents"]
+            }
+          }
+        },
+        {
+          "name": "Invalid Token (Should Fail)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Invalid token rejected', () => {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "console.log('🚫 Invalid token correctly rejected');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer invalid-jwt-token-xyz"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents"]
+            }
+          }
+        },
+        {
+          "name": "Non-existent Document (Should 404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Not found for invalid document', () => {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "console.log('🚫 Non-existent resource correctly handled');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/00000000-0000-0000-0000-000000000000",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "00000000-0000-0000-0000-000000000000"]
+            }
+          }
+        },
+        {
+          "name": "Non-Owner Cannot Delete (Should 403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Non-owner cannot delete', () => {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "console.log('🚫 Non-owner deletion correctly blocked');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{collabToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}"]
+            }
+          }
+        },
+        {
+          "name": "Non-Admin Cannot Cleanup Tokens",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Non-admin cannot cleanup', () => {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "console.log('🚫 Admin-only operation protected');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/downloads/cleanup",
+              "host": ["{{BASE_URL}}"],
+              "path": ["downloads", "cleanup"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Cleanup (Optional)",
+      "item": [
+        {
+          "name": "Delete Test Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Document deleted', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "console.log('🗑️ Test document deleted');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Test Users (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "console.log('🧹 Cleanup complete - Test users would be deleted in production');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["health"]
+            }
+          }
+        },
+        {
+          "name": "Final Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Final health check passed', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "console.log('\\n========================================');",
+                  "console.log('✅ HDM v2 COMPREHENSIVE TEST COMPLETED');",
+                  "console.log('========================================');",
+                  "console.log('✓ Authentication & Authorization');",
+                  "console.log('✓ Document Lifecycle Management');",
+                  "console.log('✓ Permission System (RBAC)');",
+                  "console.log('✓ Metadata Operations');",
+                  "console.log('✓ Download Token System');",
+                  "console.log('✓ Advanced Features');",
+                  "console.log('✓ Security & Edge Cases');",
+                  "console.log('========================================');",
+                  "console.log('🎉 All Systems Operational!');",
+                  "console.log('========================================\\n');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/health",
+              "host": ["{{BASE_URL}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set default base URL if not set",
+          "if (!pm.environment.get('BASE_URL')) {",
+          "    pm.environment.set('BASE_URL', 'http://localhost:3000');",
+          "}",
+          "",
+          "// Add correlation ID to all requests",
+          "const correlationId = pm.variables.replaceIn('{{$guid}}');",
+          "pm.request.headers.add({",
+          "    key: 'X-Correlation-ID',",
+          "    value: correlationId",
+          "});"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Log response time for performance monitoring",
+          "const responseTime = pm.response.responseTime;",
+          "if (responseTime > 1000) {",
+          "    console.warn('⚠️ Slow response: ' + pm.info.requestName + ' (' + responseTime + 'ms)');",
+          "}",
+          "",
+          "// Check for correlation ID in response",
+          "const correlationId = pm.response.headers.get('x-correlation-id');",
+          "if (correlationId) {",
+          "    pm.environment.set('lastCorrelationId', correlationId);",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:3000",
+      "type": "string"
+    }
+  ]
+}

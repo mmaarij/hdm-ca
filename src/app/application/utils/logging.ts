@@ -6,6 +6,7 @@
  */
 
 import { Effect } from "effect";
+import { getCorrelationId } from "../../presentation/http/middleware/correlation.middleware";
 
 /**
  * Log levels
@@ -20,28 +21,54 @@ export interface LogContext {
   readonly useCase?: string;
   readonly userId?: string;
   readonly documentId?: string;
+  readonly correlationId?: string;
   readonly [key: string]: unknown;
 }
 
 /**
+ * Add correlation ID to log context
+ */
+const enrichContext = (
+  context?: LogContext
+): Effect.Effect<LogContext, never, never> =>
+  Effect.gen(function* () {
+    const correlationId = yield* Effect.either(getCorrelationId());
+    const corrId =
+      correlationId._tag === "Right" ? correlationId.right : undefined;
+
+    return {
+      ...context,
+      correlationId: context?.correlationId || corrId,
+    };
+  });
+
+/**
  * Create a structured log effect
  */
-export const log = (level: LogLevel, message: string, context?: LogContext) => {
-  const structuredMessage = context
-    ? `${message} ${JSON.stringify(context)}`
-    : message;
+export const log = (
+  level: LogLevel,
+  message: string,
+  context?: LogContext
+): Effect.Effect<void, never, never> =>
+  Effect.gen(function* () {
+    const enrichedContext = yield* enrichContext(context);
+    const structuredMessage = `${message} ${JSON.stringify(enrichedContext)}`;
 
-  switch (level) {
-    case "debug":
-      return Effect.logDebug(structuredMessage);
-    case "info":
-      return Effect.logInfo(structuredMessage);
-    case "warn":
-      return Effect.logWarning(structuredMessage);
-    case "error":
-      return Effect.logError(structuredMessage);
-  }
-};
+    switch (level) {
+      case "debug":
+        yield* Effect.logDebug(structuredMessage);
+        break;
+      case "info":
+        yield* Effect.logInfo(structuredMessage);
+        break;
+      case "warn":
+        yield* Effect.logWarning(structuredMessage);
+        break;
+      case "error":
+        yield* Effect.logError(structuredMessage);
+        break;
+    }
+  });
 
 /**
  * Log info
