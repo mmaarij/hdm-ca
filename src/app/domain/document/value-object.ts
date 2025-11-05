@@ -82,12 +82,6 @@ export const VersionNumber = S.Number.pipe(
 export type VersionNumber = S.Schema.Type<typeof VersionNumber>;
 
 /**
- * Document Status
- */
-export const DocumentStatus = S.Literal("DRAFT", "PUBLISHED");
-export type DocumentStatus = S.Schema.Type<typeof DocumentStatus>;
-
-/**
  * Content Reference (unique identifier for file content)
  */
 export const ContentRef = S.String.pipe(
@@ -121,8 +115,6 @@ export const makeFileSize = (input: unknown) =>
   S.decodeUnknown(FileSize)(input);
 export const makeVersionNumber = (input: unknown) =>
   S.decodeUnknown(VersionNumber)(input);
-export const makeDocumentStatus = (input: unknown) =>
-  S.decodeUnknown(DocumentStatus)(input);
 export const makeContentRef = (input: unknown) =>
   S.decodeUnknown(ContentRef)(input);
 export const makeChecksum = (input: unknown) =>

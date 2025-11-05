@@ -1,10 +1,11 @@
 /**
  * Document Routes
  *
- * HTTP endpoints for document operations (upload, retrieve, publish, delete)
+ * HTTP endpoints for document operations
+ * Simplified single-step upload with automatic versioning and metadata extraction
  */
 
-import { Elysia } from "elysia";
+import { Elysia, t } from "elysia";
 import { Effect } from "effect";
 import type { Runtime } from "effect";
 import { DocumentWorkflowTag } from "../../../application/workflows/document-workflow";
@@ -20,127 +21,62 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
   return (
     new Elysia({ prefix: "/documents" })
       /**
-       * POST /documents/initiate-upload
-       * Initiate two-phase upload (Phase 1)
+       * POST /documents
+       * Single-step upload - creates new document or adds version
+       * Accepts multipart/form-data with:
+       * - file: the actual file (required)
+       * - documentId: optional, if provided creates new version
        */
-      .post("/initiate-upload", async ({ headers, body }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const command = yield* validateBody(
-            DocumentDTOs.InitiateUploadCommand,
-            {
-              ...(body as any),
+      .post(
+        "/",
+        async ({ headers, body }) => {
+          const effect = Effect.gen(function* () {
+            const documentWorkflow = yield* DocumentWorkflowTag;
+            const auth = yield* requireAuth();
+
+            // Extract file and documentId from form data
+            const formData = body as any;
+            const file = formData.file;
+
+            if (!file) {
+              return yield* Effect.fail(new Error("File is required"));
+            }
+
+            // Build command - storage layer handles all file operations
+            const command = {
+              documentId: formData.documentId || undefined,
+              file: file, // Pass raw file to workflow/storage layer
               uploadedBy: auth.userId,
-            }
-          );
-          const result = yield* documentWorkflow.initiateUpload(command);
-          return result;
-        });
+            };
 
-        return runEffect(
-          withAuth(effect, headers.authorization) as any,
-          runtime
-        );
-      })
+            const validatedCommand = yield* validateBody(
+              DocumentDTOs.UploadDocumentCommand,
+              command
+            );
 
-      /**
-       * POST /documents/confirm-upload
-       * Confirm upload (Phase 2)
-       */
-      .post("/confirm-upload", async ({ headers, body }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const command = yield* validateBody(
-            DocumentDTOs.ConfirmUploadCommand,
-            {
-              ...(body as any),
-              userId: auth.userId,
-            }
-          );
-          const result = yield* documentWorkflow.confirmUpload(command);
-          return result;
-        });
+            const result = yield* documentWorkflow.uploadDocument(
+              validatedCommand
+            );
 
-        return runEffect(
-          withAuth(effect, headers.authorization) as any,
-          runtime
-        );
-      })
-
-      /**
-       * POST /documents/metadata
-       * Create document metadata without immediate file upload
-       */
-      .post("/metadata", async ({ headers, body }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const command = yield* validateBody(
-            DocumentDTOs.CreateDocumentMetadataCommand,
-            {
-              ...(body as any),
-              uploadedBy: auth.userId,
-            }
-          );
-          const result = yield* documentWorkflow.createDocumentMetadata(
-            command
-          );
-          return result;
-        });
-
-        return runEffect(
-          withAuth(effect, headers.authorization) as any,
-          runtime
-        );
-      })
-
-      /**
-       * POST /documents/:documentId/publish
-       * Publish document
-       */
-      .post("/:documentId/publish", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const result = yield* documentWorkflow.publishDocument({
-            documentId: params.documentId as any,
-            userId: auth.userId as any,
+            return result;
           });
-          return result;
-        });
 
-        return runEffect(
-          withAuth(effect, headers.authorization) as any,
-          runtime
-        );
-      })
-
-      /**
-       * POST /documents/:documentId/unpublish
-       * Unpublish document
-       */
-      .post("/:documentId/unpublish", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const result = yield* documentWorkflow.unpublishDocument({
-            documentId: params.documentId as any,
-            userId: auth.userId as any,
-          });
-          return result;
-        });
-
-        return runEffect(
-          withAuth(effect, headers.authorization) as any,
-          runtime
-        );
-      })
+          return runEffect(
+            withAuth(effect, headers.authorization) as any,
+            runtime
+          );
+        },
+        {
+          body: t.Object({
+            file: t.File(),
+            documentId: t.Optional(t.String()),
+          }),
+        }
+      )
 
       /**
        * GET /documents/:documentId
-       * Get document by ID
+       * Get document by ID (returns latest version)
        */
       .get("/:documentId", async ({ headers, params }) => {
         const effect = Effect.gen(function* () {
@@ -150,6 +86,49 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             documentId: params.documentId as any,
             userId: auth.userId as any,
           });
+          return result;
+        });
+
+        return runEffect(
+          withAuth(effect, headers.authorization) as any,
+          runtime
+        );
+      })
+
+      /**
+       * GET /documents/:documentId/versions/:versionId
+       * Get specific version of a document
+       */
+      .get("/:documentId/versions/:versionId", async ({ headers, params }) => {
+        const effect = Effect.gen(function* () {
+          const documentWorkflow = yield* DocumentWorkflowTag;
+          const auth = yield* requireAuth();
+          const result = yield* documentWorkflow.getDocumentVersion({
+            documentId: params.documentId as any,
+            versionId: params.versionId as any,
+            userId: auth.userId as any,
+          });
+          return result;
+        });
+
+        return runEffect(
+          withAuth(effect, headers.authorization) as any,
+          runtime
+        );
+      })
+
+      /**
+       * GET /documents/:documentId/versions
+       * List all versions of a document
+       */
+      .get("/:documentId/versions", async ({ headers, params }) => {
+        const effect = Effect.gen(function* () {
+          const documentWorkflow = yield* DocumentWorkflowTag;
+          const auth = yield* requireAuth();
+          const result = yield* documentWorkflow.listDocumentVersions(
+            params.documentId as any,
+            auth.userId as any
+          );
           return result;
         });
 
@@ -235,34 +214,8 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
       })
 
       /**
-       * PUT /documents/:documentId
-       * Update document
-       */
-      .put("/:documentId", async ({ headers, params, body }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const command = yield* validateBody(
-            DocumentDTOs.UpdateDocumentCommand,
-            {
-              documentId: params.documentId,
-              userId: auth.userId,
-              ...(body as any),
-            }
-          );
-          const result = yield* documentWorkflow.updateDocument(command);
-          return result;
-        });
-
-        return runEffect(
-          withAuth(effect, headers.authorization) as any,
-          runtime
-        );
-      })
-
-      /**
        * DELETE /documents/:documentId
-       * Delete document
+       * Delete document and all its versions
        */
       .delete("/:documentId", async ({ headers, params }) => {
         const effect = Effect.gen(function* () {

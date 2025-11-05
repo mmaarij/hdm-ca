@@ -46,7 +46,6 @@ export const DocumentRepositoryLive = Layer.effect(
               mimeType: payload.mimeType,
               size: payload.size,
               path: payload.path || undefined,
-              status: (payload.status as "DRAFT" | "PUBLISHED") || "DRAFT",
               uploadedBy: payload.uploadedBy,
             }),
           catch: (error) => {
@@ -363,15 +362,16 @@ export const DocumentRepositoryLive = Layer.effect(
         const offset = (page - 1) * limit;
         const searchPattern = `%${query}%`;
 
+        // Search in documents table, not versions - return unique documents only
         const [countResult] = yield* Effect.tryPromise({
           try: () =>
             db
               .select({ count: drizzleCount() })
-              .from(documentVersions)
+              .from(documents)
               .where(
                 or(
-                  like(documentVersions.filename, searchPattern),
-                  like(documentVersions.originalName, searchPattern)
+                  like(documents.filename, searchPattern),
+                  like(documents.originalName, searchPattern)
                 )
               ),
           catch: () =>
@@ -381,14 +381,14 @@ export const DocumentRepositoryLive = Layer.effect(
         const totalItems = countResult?.count || 0;
         const totalPages = Math.ceil(totalItems / limit);
 
-        const versions = yield* Effect.tryPromise({
+        const docs = yield* Effect.tryPromise({
           try: () =>
-            db.query.documentVersions.findMany({
+            db.query.documents.findMany({
               where: or(
-                like(documentVersions.filename, searchPattern),
-                like(documentVersions.originalName, searchPattern)
+                like(documents.filename, searchPattern),
+                like(documents.originalName, searchPattern)
               ),
-              orderBy: [desc(documentVersions.createdAt)],
+              orderBy: [desc(documents.updatedAt)],
               limit,
               offset,
             }),
@@ -396,8 +396,25 @@ export const DocumentRepositoryLive = Layer.effect(
             new DocumentConstraintError({ message: "Database error" }),
         });
 
+        // Get latest version for each document to include in results
+        const docsWithVersions = yield* Effect.all(
+          docs.map((doc) =>
+            Effect.gen(function* () {
+              const latestVersionOpt = yield* getLatestVersion(
+                doc.id as DocumentId
+              );
+              return {
+                document: doc as unknown as Document,
+                latestVersion: Option.isSome(latestVersionOpt)
+                  ? latestVersionOpt.value
+                  : undefined,
+              };
+            })
+          )
+        );
+
         return {
-          data: versions as unknown as readonly DocumentVersion[],
+          data: docsWithVersions.map((dv) => dv.document),
           meta: {
             page,
             limit,
@@ -420,7 +437,6 @@ export const DocumentRepositoryLive = Layer.effect(
         if (payload.originalName !== undefined)
           updateData.originalName = payload.originalName;
         if (payload.path !== undefined) updateData.path = payload.path;
-        if (payload.status !== undefined) updateData.status = payload.status;
 
         if (Object.keys(updateData).length === 0) {
           const doc = yield* findDocument(id);

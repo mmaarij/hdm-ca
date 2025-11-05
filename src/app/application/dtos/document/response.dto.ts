@@ -1,5 +1,7 @@
 /**
  * Document Response DTOs
+ *
+ * Simplified response structures without status field.
  */
 
 import { Schema as S } from "effect";
@@ -13,8 +15,6 @@ import {
   MimeType,
   FileSize,
   VersionNumber,
-  DocumentStatus,
-  Checksum,
 } from "../../../domain/document/value-object";
 import { DateTime } from "../../../domain/refined/date-time";
 
@@ -27,7 +27,6 @@ export const DocumentResponse = S.Struct({
   originalName: Filename,
   mimeType: MimeType,
   size: FileSize,
-  status: DocumentStatus, // DRAFT or PUBLISHED
   uploadedBy: UserId,
   createdAt: S.optional(DateTime),
   updatedAt: S.optional(DateTime),
@@ -81,34 +80,6 @@ export type UploadDocumentResponse = S.Schema.Type<
 >;
 
 /**
- * Initiate Upload Response
- */
-export const InitiateUploadResponse = S.Struct({
-  documentId: DocumentId,
-  versionId: DocumentVersionId,
-  uploadUrl: S.String, // Pre-signed URL for upload
-  checksum: Checksum, // Echo back for confirmation
-  expiresAt: DateTime, // URL expiration time
-});
-
-export type InitiateUploadResponse = S.Schema.Type<
-  typeof InitiateUploadResponse
->;
-
-/**
- * Confirm Upload Response
- */
-export const ConfirmUploadResponse = S.Struct({
-  documentId: DocumentId,
-  versionId: DocumentVersionId,
-  status: DocumentStatus,
-  document: DocumentResponse,
-  version: DocumentVersionResponse,
-});
-
-export type ConfirmUploadResponse = S.Schema.Type<typeof ConfirmUploadResponse>;
-
-/**
  * Paginated Documents Response
  */
 export const PaginatedDocumentsResponse = S.Struct({
@@ -126,10 +97,10 @@ export type PaginatedDocumentsResponse = S.Schema.Type<
 >;
 
 /**
- * Search Documents Response
+ * Search Documents Response (returns unique documents, not versions)
  */
 export const SearchDocumentsResponse = S.Struct({
-  results: S.Array(DocumentVersionResponse),
+  results: S.Array(DocumentResponse),
   total: S.Number,
   page: S.Number,
   limit: S.Number,

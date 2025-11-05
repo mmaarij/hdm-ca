@@ -128,12 +128,12 @@ export interface DocumentRepository {
   ) => Effect.Effect<Paginated<DocumentWithVersion>, DocumentDomainError>;
 
   /**
-   * Search documents by query
+   * Search documents by query (returns unique documents, not versions)
    */
   readonly search: (
     query: string,
     pagination: PaginationParams
-  ) => Effect.Effect<Paginated<DocumentVersion>, DocumentDomainError>;
+  ) => Effect.Effect<Paginated<Document>, DocumentDomainError>;
 
   /**
    * Update document

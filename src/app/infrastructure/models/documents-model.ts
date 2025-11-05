@@ -16,10 +16,7 @@ export const documents = sqliteTable(
     originalName: text("original_name").notNull(),
     mimeType: text("mime_type").notNull(),
     size: integer("size").notNull(),
-    path: text("path"), // Optional for metadata-only creation
-    status: text("status", { enum: ["DRAFT", "PUBLISHED"] })
-      .notNull()
-      .default("DRAFT"), // Document status
+    path: text("path"),
     uploadedBy: text("uploaded_by")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -27,6 +24,5 @@ export const documents = sqliteTable(
   },
   (table) => ({
     uploadedByIdx: index("idx_documents_uploaded_by").on(table.uploadedBy),
-    statusIdx: index("idx_documents_status").on(table.status),
   })
 );

@@ -7,7 +7,6 @@ import {
   MimeType,
   FileSize,
   VersionNumber,
-  DocumentStatus,
   ContentRef,
   Checksum,
 } from "./value-object";
@@ -24,8 +23,7 @@ export const Document = S.Struct({
   originalName: Filename,
   mimeType: MimeType,
   size: FileSize,
-  path: S.optional(FilePath), // Optional for metadata-only creation
-  status: DocumentStatus, // DRAFT or PUBLISHED
+  path: S.optional(FilePath),
   uploadedBy: UserId,
   createdAt: S.optional(DateTime),
   updatedAt: S.optional(DateTime),
@@ -64,8 +62,7 @@ export const CreateDocumentPayload = S.Struct({
   originalName: Filename,
   mimeType: MimeType,
   size: FileSize,
-  path: S.optional(FilePath), // Optional for metadata-only creation
-  status: S.optional(DocumentStatus), // Defaults to DRAFT
+  path: S.optional(FilePath),
   uploadedBy: UserId,
 });
 
@@ -100,7 +97,6 @@ export const UpdateDocumentPayload = S.partial(
     filename: Filename,
     originalName: Filename,
     path: FilePath,
-    status: DocumentStatus,
   })
 );
 

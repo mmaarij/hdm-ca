@@ -8,12 +8,24 @@
 import { Effect, Context } from "effect";
 
 /**
- * Pre-signed upload URL result
+ * Uploaded file data from HTTP multipart form
  */
-export interface PresignedUploadUrl {
-  readonly url: string;
-  readonly contentRef: string;
-  readonly expiresAt: Date;
+export interface UploadedFile {
+  readonly name: string;
+  readonly size: number;
+  readonly type?: string;
+  readonly arrayBuffer: () => Promise<ArrayBuffer>;
+}
+
+/**
+ * Result of storing an uploaded file
+ */
+export interface StoredFileInfo {
+  readonly path: string;
+  readonly filename: string;
+  readonly originalName: string;
+  readonly mimeType: string;
+  readonly size: number;
 }
 
 /**
@@ -24,31 +36,35 @@ export interface PresignedUploadUrl {
  */
 export interface StoragePort {
   /**
-   * Generate a pre-signed URL for direct file upload
+   * Store uploaded file with automatic metadata extraction
+   * Handles temp file creation, metadata extraction, and cleanup
    *
-   * @param filename - Name of the file to upload
-   * @param mimeType - MIME type of the file
+   * @param file - Uploaded file from HTTP multipart form
    * @param documentId - Document ID for organizing storage
    * @param versionId - Version ID for organizing storage
-   * @returns Pre-signed URL with expiration and content reference
+   * @returns Stored file information (path, metadata)
    */
-  readonly generatePresignedUploadUrl: (
-    filename: string,
-    mimeType: string,
+  readonly storeUploadedFile: (
+    file: UploadedFile,
     documentId: string,
     versionId: string
-  ) => Effect.Effect<PresignedUploadUrl, Error>;
+  ) => Effect.Effect<StoredFileInfo, Error>;
 
   /**
-   * Move file from temporary location to permanent storage
+   * Store file in organized structure: uploads/{docId}/{versionId}/{filename}
+   * (Lower-level method for when you already have a file on disk)
    *
-   * @param tempPath - Temporary file path
-   * @param filename - Destination filename
+   * @param tempPath - Temporary file path from upload
+   * @param filename - Original filename
+   * @param documentId - Document ID for organizing storage
+   * @param versionId - Version ID for organizing storage
    * @returns Final storage path
    */
-  readonly moveToStorage: (
+  readonly storeFile: (
     tempPath: string,
-    filename: string
+    filename: string,
+    documentId: string,
+    versionId: string
   ) => Effect.Effect<string, Error>;
 
   /**

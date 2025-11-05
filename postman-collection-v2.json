@@ -1,11 +1,11 @@
 {
   "info": {
-    "_postman_id": "a1624504-1797-476b-bb9a-1ed937a44eb8",
+    "_postman_id": "b4145eb7-6a70-42ad-857b-ac10062f6c22",
     "name": "HDM CA API Testing Suite",
-    "description": "Comprehensive testing suite for HDM CA API with full workflow coverage.\n\n**Test Flow:**\n1. Setup & Authentication - Register and authenticate users\n2. Document Lifecycle - Upload, initiate, confirm, publish\n3. Permission Management - Grant, update, check, revoke\n4. Metadata Operations - Add, update, query metadata\n5. Download System - Generate links, validate tokens, download files\n6. Advanced Features - Search, admin operations\n7. Security & Edge Cases - Validation and error handling\n\n**Test Users:**\n- Admin: admin@hdm.test / AdminPass123!\n- Owner: owner@hdm.test / OwnerPass123!\n- Collaborator: collab@hdm.test / CollabPass123!\n\n**Usage:** Run collection with Collection Runner for full automated testing",
+    "description": "Comprehensive testing suite for HDM CA API with maximally simplified upload workflow.\n\n**Test Flow:**\n1. Setup & Authentication - Register and authenticate users\n2. Document Lifecycle - Single-step upload with auto-metadata extraction\n3. Permission Management - Grant, update, check, revoke\n4. Metadata Operations - Add, update, query metadata\n5. Download System - Generate links, validate tokens, download files\n6. Advanced Features - Search, admin operations, version management\n7. Security & Edge Cases - Validation and error handling\n\n**Test Users:**\n- Admin: admin@hdm.test / AdminPass123!\n- Owner: owner@hdm.test / OwnerPass123!\n- Collaborator: collab@hdm.test / CollabPass123!\n\n**Simplified Upload:**\n- Just send the file - filename, MIME type, and size are auto-detected\n- For new versions, include documentId\n- Automatic version incrementing\n- No manual metadata entry required\n\n**Usage:** Run collection with Collection Runner for full automated testing",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "48882079",
-    "_collection_link": "https://muhammad-maarij-5574753.postman.co/workspace/Muhammad-Maarij's-Workspace~69a6fe11-d883-49bd-80fa-22cb46b3bcc9/collection/48882079-a1624504-1797-476b-bb9a-1ed937a44eb8?action=share&source=collection_link&creator=48882079"
+    "_collection_link": "https://muhammad-maarij-5574753.postman.co/workspace/Muhammad-Maarij's-Workspace~69a6fe11-d883-49bd-80fa-22cb46b3bcc9/collection/48882079-b4145eb7-6a70-42ad-857b-ac10062f6c22?action=share&source=collection_link&creator=48882079"
   },
   "item": [
     {
@@ -363,31 +363,31 @@
       "name": "2. Document Lifecycle",
       "item": [
         {
-          "name": "Initiate Document Upload (Owner)",
+          "name": "Upload New Document (Owner)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Upload initiated', () => {",
+                  "pm.test('✅ Document uploaded (v1)', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.documentId).to.exist;",
                   "    pm.expect(body.versionId).to.exist;",
-                  "    pm.expect(body.uploadUrl).to.exist;",
-                  "    pm.expect(body.checksum).to.exist;",
-                  "    pm.expect(body.expiresAt).to.exist;",
+                  "    pm.expect(body.document).to.exist;",
+                  "    pm.expect(body.version).to.exist;",
+                  "    pm.expect(body.version.versionNumber).to.eql(1);",
                   "    pm.environment.set('ownerDocId', body.documentId);",
                   "    pm.environment.set('ownerVersionId', body.versionId);",
-                  "    pm.environment.set('ownerChecksum', body.checksum);",
-                  "    pm.environment.set('ownerUploadUrl', body.uploadUrl);",
+                  "    pm.environment.set('ownerVersion1Id', body.versionId);",
                   "});",
-                  "console.log('📤 Document upload initiated');",
+                  "console.log('📤 New document uploaded');",
                   "console.log('   Document ID: ' + pm.environment.get('ownerDocId'));",
-                  "console.log('   Version ID: ' + pm.environment.get('ownerVersionId'));",
-                  "console.log('   Upload URL: ' + pm.environment.get('ownerUploadUrl'));"
+                  "console.log('   Version 1 ID: ' + pm.environment.get('ownerVersionId'));"
                 ],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -397,82 +397,44 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{ownerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"filename\": \"proposal.pdf\",\n  \"originalName\": \"Project Proposal Document.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"size\": 1048576,\n  \"checksum\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/documents/initiate-upload",
-              "host": ["{{BASE_URL}}"],
-              "path": ["documents", "initiate-upload"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Upload File to Storage (Owner)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('✅ File uploaded to storage', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "    const body = pm.response.json();",
-                  "    pm.expect(body.storagePath).to.exist;",
-                  "    pm.expect(body.message).to.eql('File uploaded successfully');",
-                  "    pm.environment.set('ownerStoragePath', body.storagePath);",
-                  "});",
-                  "console.log('📁 File uploaded to: ' + pm.environment.get('ownerStoragePath'));"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "file",
+                  "description": "Upload a test file - filename, MIME type, and size are auto-detected",
                   "type": "file",
-                  "src": []
+                  "src": "postman-cloud:///1f0a070f-9af1-4e30-9d26-3b04ee6651d9"
                 }
               ]
             },
             "url": {
-              "raw": "{{ownerUploadUrl}}",
-              "host": ["{{ownerUploadUrl}}"]
+              "raw": "{{BASE_URL}}/documents",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents"]
             }
           },
           "response": []
         },
         {
-          "name": "Confirm Document Upload (Owner)",
+          "name": "Upload New Version (Owner)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Upload confirmed', () => {",
+                  "pm.test('✅ New version uploaded (v2)', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.documentId).to.exist;",
+                  "    pm.expect(body.documentId).to.eql(pm.environment.get('ownerDocId'));",
                   "    pm.expect(body.versionId).to.exist;",
-                  "    pm.expect(body.status).to.eql('DRAFT');",
-                  "    pm.expect(body.document).to.exist;",
-                  "    pm.expect(body.version).to.exist;",
-                  "    pm.environment.set('ownerVersionId', body.versionId);",
+                  "    pm.expect(body.version.versionNumber).to.eql(2);",
+                  "    pm.environment.set('ownerVersion2Id', body.versionId);",
                   "});",
-                  "console.log('✅ Document upload confirmed');"
+                  "console.log('� Version 2 uploaded');",
+                  "console.log('   Version 2 ID: ' + pm.environment.get('ownerVersion2Id'));"
                 ],
                 "type": "text/javascript"
               }
@@ -484,26 +446,35 @@
               {
                 "key": "Authorization",
                 "value": "Bearer {{ownerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
               }
             ],
             "body": {
-              "mode": "raw",
-              "raw": "{\n  \"documentId\": \"{{ownerDocId}}\",\n  \"checksum\": \"{{ownerChecksum}}\",\n  \"storagePath\": \"{{ownerStoragePath}}\"\n}"
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "description": "Upload updated file - metadata auto-detected from file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "documentId",
+                  "value": "{{ownerDocId}}",
+                  "description": "ID of document to add version to",
+                  "type": "text"
+                }
+              ]
             },
             "url": {
-              "raw": "{{BASE_URL}}/documents/confirm-upload",
+              "raw": "{{BASE_URL}}/documents",
               "host": ["{{BASE_URL}}"],
-              "path": ["documents", "confirm-upload"]
+              "path": ["documents"]
             }
           },
           "response": []
         },
         {
-          "name": "Get Document Details (Owner)",
+          "name": "Get Document Details (Latest Version)",
           "event": [
             {
               "listen": "test",
@@ -513,9 +484,11 @@
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.document.id).to.eql(pm.environment.get('ownerDocId'));",
-                  "    pm.expect(body.document.originalName).to.eql('Project Proposal Document.pdf');",
+                  "    pm.expect(body.document.originalName).to.exist;",
+                  "    pm.expect(body.latestVersion).to.exist;",
+                  "    pm.expect(body.latestVersion.versionNumber).to.eql(2);",
                   "});",
-                  "console.log('📄 Document details fetched');"
+                  "console.log('📄 Document details fetched (latest = v2)');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -535,6 +508,84 @@
               "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Specific Version (v1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Specific version retrieved', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.eql(pm.environment.get('ownerVersion1Id'));",
+                  "    pm.expect(body.versionNumber).to.eql(1);",
+                  "    pm.expect(body.documentId).to.eql(pm.environment.get('ownerDocId'));",
+                  "});",
+                  "console.log('📄 Version 1 details fetched');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}/versions/{{ownerVersion1Id}}",
+              "host": ["{{BASE_URL}}"],
+              "path": [
+                "documents",
+                "{{ownerDocId}}",
+                "versions",
+                "{{ownerVersion1Id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List All Document Versions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ All versions listed', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body).to.be.an('array');",
+                  "    pm.expect(body.length).to.eql(2);",
+                  "    pm.expect(body[0].versionNumber).to.exist;",
+                  "    pm.expect(body[1].versionNumber).to.exist;",
+                  "});",
+                  "console.log('📚 All versions listed (2 versions)');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}/versions",
+              "host": ["{{BASE_URL}}"],
+              "path": ["documents", "{{ownerDocId}}", "versions"]
             }
           },
           "response": []
@@ -577,97 +628,25 @@
           "response": []
         },
         {
-          "name": "Publish Document (Owner)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('✅ Document published', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "    const body = pm.response.json();",
-                  "    pm.expect(body.status).to.eql('PUBLISHED');",
-                  "});",
-                  "console.log('📢 Document published');"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{ownerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}/publish",
-              "host": ["{{BASE_URL}}"],
-              "path": ["documents", "{{ownerDocId}}", "publish"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Update Document (Owner)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('✅ Document updated', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "    const body = pm.response.json();",
-                  "    pm.expect(body.id).to.exist;",
-                  "    pm.expect(body.originalName).to.eql('Updated Project Proposal Document.pdf');",
-                  "});",
-                  "console.log('📝 Document updated');"
-                ],
-                "type": "text/javascript",
-                "packages": {},
-                "requests": {}
-              }
-            }
-          ],
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{ownerToken}}"
-              },
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"originalName\": \"Updated Project Proposal Document.pdf\",\n  \"filename\": \"proposal-v2.pdf\"\n}"
-            },
-            "url": {
-              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
-              "host": ["{{BASE_URL}}"],
-              "path": ["documents", "{{ownerDocId}}"]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "Search Documents (Owner)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Search results retrieved', () => {",
+                  "pm.test('✅ Search returns unique documents', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.results).to.be.an('array');",
+                  "    // Should return documents, not versions",
+                  "    if (body.results.length > 0) {",
+                  "        pm.expect(body.results[0]).to.have.property('id');",
+                  "        pm.expect(body.results[0]).to.have.property('filename');",
+                  "        pm.expect(body.results[0]).to.not.have.property('versionNumber');",
+                  "        pm.expect(body.results[0]).to.not.have.property('documentId');",
+                  "    }",
                   "});",
-                  "console.log('🔍 Search completed');"
+                  "console.log('🔍 Search completed - unique documents only');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -1522,40 +1501,6 @@
           "response": []
         },
         {
-          "name": "Unpublish Document",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('✅ Document unpublished', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "    const body = pm.response.json();",
-                  "    pm.expect(body.status).to.eql('DRAFT');",
-                  "});",
-                  "console.log('📝 Document unpublished');"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{ownerToken}}"
-              }
-            ],
-            "url": {
-              "raw": "{{BASE_URL}}/documents/{{ownerDocId}}/unpublish",
-              "host": ["{{BASE_URL}}"],
-              "path": ["documents", "{{ownerDocId}}", "unpublish"]
-            }
-          },
-          "response": []
-        },
-        {
           "name": "Update User Profile",
           "event": [
             {
@@ -1865,17 +1810,19 @@
                   "});",
                   "",
                   "console.log('\\n========================================');",
-                  "console.log('✅ HDM v2 COMPREHENSIVE TEST COMPLETED');",
+                  "console.log('✅ HDM v2 SIMPLIFIED WORKFLOW TEST COMPLETED');",
                   "console.log('========================================');",
                   "console.log('✓ Authentication & Authorization');",
-                  "console.log('✓ Document Lifecycle Management');",
+                  "console.log('✓ Simplified Single-Step Upload');",
+                  "console.log('✓ Automatic Version Management');",
                   "console.log('✓ Permission System (RBAC)');",
                   "console.log('✓ Metadata Operations');",
                   "console.log('✓ Download Token System');",
-                  "console.log('✓ Advanced Features');",
+                  "console.log('✓ Advanced Features & Version Access');",
                   "console.log('✓ Security & Edge Cases');",
                   "console.log('========================================');",
                   "console.log('🎉 All Systems Operational!');",
+                  "console.log('🚀 Simplified Flow: 10x Easier!');",
                   "console.log('========================================\\n');"
                 ],
                 "type": "text/javascript"
