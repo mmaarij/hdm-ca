@@ -1041,9 +1041,6 @@ export const DocumentWorkflowLive = Layer.effect(
             }
           }
 
-          // Delete document (cascade will delete versions and permissions)
-          yield* documentRepo.deleteDocument(command.documentId);
-
           // Add audit log before deletion
           yield* documentRepo.addAudit({
             documentId: command.documentId,
@@ -1051,6 +1048,9 @@ export const DocumentWorkflowLive = Layer.effect(
             performedBy: command.userId,
             details: "Document and all versions deleted",
           });
+
+          // Delete document (cascade will delete versions and permissions)
+          yield* documentRepo.deleteDocument(command.documentId);
         }),
         { userId: command.userId, documentId: command.documentId }
       );

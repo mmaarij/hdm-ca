@@ -415,9 +415,12 @@ export const DocumentRepositoryLive = Layer.effect(
     ) =>
       Effect.gen(function* () {
         const updateData: Record<string, any> = {};
-        if (payload.filename) updateData.filename = payload.filename;
-        if (payload.originalName)
+        if (payload.filename !== undefined)
+          updateData.filename = payload.filename;
+        if (payload.originalName !== undefined)
           updateData.originalName = payload.originalName;
+        if (payload.path !== undefined) updateData.path = payload.path;
+        if (payload.status !== undefined) updateData.status = payload.status;
 
         if (Object.keys(updateData).length === 0) {
           const doc = yield* findDocument(id);

@@ -53,7 +53,8 @@ export function migrateTestDatabase(db: TestDatabase): void {
       original_name TEXT NOT NULL,
       mime_type TEXT NOT NULL,
       size INTEGER NOT NULL,
-      path TEXT NOT NULL,
+      path TEXT,
+      status TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT', 'PUBLISHED')),
       uploaded_by TEXT NOT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -65,6 +66,10 @@ export function migrateTestDatabase(db: TestDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_documents_uploaded_by ON documents(uploaded_by);
   `);
 
+  sqlite.run(`
+    CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
+  `);
+
   // Create document_versions table
   sqlite.run(`
     CREATE TABLE IF NOT EXISTS document_versions (
@@ -74,7 +79,9 @@ export function migrateTestDatabase(db: TestDatabase): void {
       original_name TEXT NOT NULL,
       mime_type TEXT NOT NULL,
       size INTEGER NOT NULL,
-      path TEXT NOT NULL,
+      path TEXT,
+      content_ref TEXT,
+      checksum TEXT,
       version_number INTEGER NOT NULL,
       uploaded_by TEXT NOT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
@@ -90,6 +97,14 @@ export function migrateTestDatabase(db: TestDatabase): void {
 
   sqlite.run(`
     CREATE INDEX IF NOT EXISTS idx_versions_uploaded_by ON document_versions(uploaded_by);
+  `);
+
+  sqlite.run(`
+    CREATE INDEX IF NOT EXISTS idx_document_versions_checksum ON document_versions(checksum);
+  `);
+
+  sqlite.run(`
+    CREATE INDEX IF NOT EXISTS idx_document_versions_content_ref ON document_versions(content_ref);
   `);
 
   // Create document_permissions table
@@ -123,8 +138,8 @@ export function migrateTestDatabase(db: TestDatabase): void {
       document_id TEXT NOT NULL,
       action TEXT NOT NULL,
       performed_by TEXT NOT NULL,
-      details TEXT DEFAULT '',
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      details TEXT DEFAULT '' NOT NULL,
+      performed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
       FOREIGN KEY (performed_by) REFERENCES users(id)
     );
@@ -134,22 +149,25 @@ export function migrateTestDatabase(db: TestDatabase): void {
     CREATE INDEX IF NOT EXISTS idx_audit_document_id ON document_audit(document_id);
   `);
 
+  sqlite.run(`
+    CREATE INDEX IF NOT EXISTS idx_audit_performed_at ON document_audit(performed_at);
+  `);
+
   // Create metadata table
   sqlite.run(`
-    CREATE TABLE IF NOT EXISTS metadata (
+    CREATE TABLE IF NOT EXISTS document_metadata (
       id TEXT PRIMARY KEY,
       document_id TEXT NOT NULL,
       key TEXT NOT NULL,
       value TEXT NOT NULL,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
       UNIQUE(document_id, key)
     );
   `);
 
   sqlite.run(`
-    CREATE INDEX IF NOT EXISTS idx_metadata_document_id ON metadata(document_id);
+    CREATE INDEX IF NOT EXISTS idx_metadata_document_id ON document_metadata(document_id);
   `);
 
   // Create download_tokens table
@@ -193,7 +211,7 @@ export function cleanupTestDatabase(db: TestDatabase): void {
   // Delete in correct order due to foreign keys
   sqlite.run("DELETE FROM document_audit");
   sqlite.run("DELETE FROM download_tokens");
-  sqlite.run("DELETE FROM metadata");
+  sqlite.run("DELETE FROM document_metadata");
   sqlite.run("DELETE FROM document_permissions");
   sqlite.run("DELETE FROM document_versions");
   sqlite.run("DELETE FROM documents");
