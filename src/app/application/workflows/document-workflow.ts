@@ -185,19 +185,13 @@ export const DocumentWorkflowLive = Layer.effect(
               // Return existing upload URL (or indicate upload already complete)
               return {
                 documentId: documentOpt.value.id,
+                versionId: existingVersion.id,
                 uploadUrl: "", // Empty since already uploaded
                 checksum: command.checksum,
                 expiresAt: new Date() as any, // Already expired
               };
             }
           }
-
-          // Generate pre-signed upload URL
-          const { url, contentRef, expiresAt } =
-            yield* storageService.generatePresignedUploadUrl(
-              command.filename,
-              command.mimeType
-            );
 
           // Create document in DRAFT status (without file path yet)
           const document = yield* documentRepo.createDocument({
@@ -210,16 +204,29 @@ export const DocumentWorkflowLive = Layer.effect(
           });
 
           // Create initial version (without path/content yet)
-          yield* documentRepo.createVersion({
+          const version = yield* documentRepo.createVersion({
             documentId: document.id,
             filename: command.filename,
             originalName: command.originalName,
             mimeType: command.mimeType,
             size: command.size,
             checksum: command.checksum,
-            contentRef: contentRef as any,
             versionNumber: 1 as any,
             uploadedBy: command.uploadedBy,
+          });
+
+          // Generate pre-signed upload URL with document and version IDs
+          const { url, contentRef, expiresAt } =
+            yield* storageService.generatePresignedUploadUrl(
+              command.filename,
+              command.mimeType,
+              document.id,
+              version.id
+            );
+
+          // Update version with contentRef
+          yield* documentRepo.updateVersion(version.id, {
+            contentRef: contentRef as any,
           });
 
           // Add audit log
@@ -232,6 +239,7 @@ export const DocumentWorkflowLive = Layer.effect(
 
           return {
             documentId: document.id,
+            versionId: version.id,
             uploadUrl: url,
             checksum: command.checksum,
             expiresAt: expiresAt as any,

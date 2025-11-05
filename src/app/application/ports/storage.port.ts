@@ -28,11 +28,15 @@ export interface StoragePort {
    *
    * @param filename - Name of the file to upload
    * @param mimeType - MIME type of the file
+   * @param documentId - Document ID for organizing storage
+   * @param versionId - Version ID for organizing storage
    * @returns Pre-signed URL with expiration and content reference
    */
   readonly generatePresignedUploadUrl: (
     filename: string,
-    mimeType: string
+    mimeType: string,
+    documentId: string,
+    versionId: string
   ) => Effect.Effect<PresignedUploadUrl, Error>;
 
   /**

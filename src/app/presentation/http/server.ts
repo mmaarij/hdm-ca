@@ -12,6 +12,7 @@ import { createDocumentRoutes } from "./routes/document.routes";
 import { createPermissionRoutes } from "./routes/permission.routes";
 import { createMetadataRoutes } from "./routes/metadata.routes";
 import { createDownloadRoutes } from "./routes/download.routes";
+import { createUploadRoutes } from "./routes/upload.routes";
 import { mapErrorToStatus, type HttpErrorResponse } from "./utils/error-mapper";
 import { HttpError } from "./utils/handler";
 import {
@@ -113,7 +114,8 @@ export const createServer = <R>(runtime: Runtime.Runtime<R>) => {
     .use(createDocumentRoutes(runtime))
     .use(createPermissionRoutes(runtime))
     .use(createMetadataRoutes(runtime))
-    .use(createDownloadRoutes(runtime));
+    .use(createDownloadRoutes(runtime))
+    .use(createUploadRoutes(runtime));
 
   return app;
 };

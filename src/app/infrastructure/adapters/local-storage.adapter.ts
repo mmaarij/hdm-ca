@@ -16,6 +16,7 @@ import { StoragePortTag } from "../../application/ports/storage.port";
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT || "./data/uploads";
 const PRESIGNED_URL_EXPIRY = 3600; // 1 hour in seconds
+const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
 
 /**
  * Local filesystem-based storage implementation
@@ -23,15 +24,16 @@ const PRESIGNED_URL_EXPIRY = 3600; // 1 hour in seconds
 const makeLocalStorage = (storageRoot: string): StoragePort => ({
   generatePresignedUploadUrl: (
     filename: string,
-    mimeType: string
+    mimeType: string,
+    documentId: string,
+    versionId: string
   ): Effect.Effect<PresignedUploadUrl, Error> => {
-    const contentRef = `${Date.now()}-${filename}`;
+    const contentRef = `${documentId}/${versionId}`;
     const expiresAt = new Date(Date.now() + PRESIGNED_URL_EXPIRY * 1000);
 
     return Effect.succeed({
-      // For local storage, this is just a placeholder path
-      // In real implementation, you might use a temporary upload endpoint
-      url: `/api/upload/${contentRef}`,
+      // Local upload endpoint - organized by document/version
+      url: `${BASE_URL}/upload/${documentId}/${versionId}`,
       contentRef,
       expiresAt,
     });

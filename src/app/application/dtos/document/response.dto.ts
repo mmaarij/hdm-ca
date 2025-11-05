@@ -85,6 +85,7 @@ export type UploadDocumentResponse = S.Schema.Type<
  */
 export const InitiateUploadResponse = S.Struct({
   documentId: DocumentId,
+  versionId: DocumentVersionId,
   uploadUrl: S.String, // Pre-signed URL for upload
   checksum: Checksum, // Echo back for confirmation
   expiresAt: DateTime, // URL expiration time

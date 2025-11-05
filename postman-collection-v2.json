@@ -1,9 +1,11 @@
 {
   "info": {
-    "_postman_id": "hdm-ca",
+    "_postman_id": "a1624504-1797-476b-bb9a-1ed937a44eb8",
     "name": "HDM CA API Testing Suite",
     "description": "Comprehensive testing suite for HDM CA API with full workflow coverage.\n\n**Test Flow:**\n1. Setup & Authentication - Register and authenticate users\n2. Document Lifecycle - Upload, initiate, confirm, publish\n3. Permission Management - Grant, update, check, revoke\n4. Metadata Operations - Add, update, query metadata\n5. Download System - Generate links, validate tokens, download files\n6. Advanced Features - Search, admin operations\n7. Security & Edge Cases - Validation and error handling\n\n**Test Users:**\n- Admin: admin@hdm.test / AdminPass123!\n- Owner: owner@hdm.test / OwnerPass123!\n- Collaborator: collab@hdm.test / CollabPass123!\n\n**Usage:** Run collection with Collection Runner for full automated testing",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "48882079",
+    "_collection_link": "https://muhammad-maarij-5574753.postman.co/workspace/Muhammad-Maarij's-Workspace~69a6fe11-d883-49bd-80fa-22cb46b3bcc9/collection/48882079-a1624504-1797-476b-bb9a-1ed937a44eb8?action=share&source=collection_link&creator=48882079"
   },
   "item": [
     {
@@ -22,7 +24,8 @@
                   "    pm.expect(body.status).to.eql('healthy');",
                   "});",
                   "console.log('🏥 Health check passed');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -39,7 +42,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["health"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Register Admin",
@@ -56,7 +60,8 @@
                   "    pm.environment.set('adminUserId', body.user.id);",
                   "});",
                   "console.log('👑 Admin user registered');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -81,7 +86,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users", "register"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Register Owner",
@@ -98,7 +104,8 @@
                   "    pm.environment.set('ownerUserId', body.user.id);",
                   "});",
                   "console.log('👤 Owner user registered');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -119,7 +126,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users", "register"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Register Collaborator",
@@ -135,7 +143,8 @@
                   "    pm.environment.set('collabUserId', body.user.id);",
                   "});",
                   "console.log('👥 Collaborator user registered');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -156,7 +165,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users", "register"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Login Admin",
@@ -172,7 +182,8 @@
                   "    pm.environment.set('adminToken', body.token);",
                   "});",
                   "console.log('🔑 Admin authenticated');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -193,7 +204,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users", "login"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Login Owner",
@@ -209,7 +221,8 @@
                   "    pm.environment.set('ownerToken', body.token);",
                   "});",
                   "console.log('🔑 Owner authenticated');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -230,7 +243,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users", "login"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Login Collaborator",
@@ -246,7 +260,8 @@
                   "    pm.environment.set('collabToken', body.token);",
                   "});",
                   "console.log('🔑 Collaborator authenticated');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -267,7 +282,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users", "login"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Owner Profile",
@@ -283,7 +299,8 @@
                   "    pm.expect(body.email).to.eql('owner@hdm.test');",
                   "});",
                   "console.log('📋 Owner profile fetched');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -300,7 +317,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users", "me"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "List All Users (Admin)",
@@ -312,11 +330,14 @@
                   "pm.test('✅ Admin can list all users', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.items).to.be.an('array');",
-                  "    pm.expect(body.items.length).to.be.at.least(3);",
+                  "    pm.expect(body.users).to.be.an('array');",
+                  "    pm.expect(body.users.length).to.be.at.least(3);",
                   "});",
                   "console.log('📜 All users listed');"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -333,7 +354,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users"]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -351,12 +373,21 @@
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.documentId).to.exist;",
-                  "    pm.expect(body.contentRef).to.exist;",
+                  "    pm.expect(body.versionId).to.exist;",
+                  "    pm.expect(body.uploadUrl).to.exist;",
+                  "    pm.expect(body.checksum).to.exist;",
+                  "    pm.expect(body.expiresAt).to.exist;",
                   "    pm.environment.set('ownerDocId', body.documentId);",
-                  "    pm.environment.set('ownerContentRef', body.contentRef);",
+                  "    pm.environment.set('ownerVersionId', body.versionId);",
+                  "    pm.environment.set('ownerChecksum', body.checksum);",
+                  "    pm.environment.set('ownerUploadUrl', body.uploadUrl);",
                   "});",
-                  "console.log('📤 Document upload initiated');"
-                ]
+                  "console.log('📤 Document upload initiated');",
+                  "console.log('   Document ID: ' + pm.environment.get('ownerDocId'));",
+                  "console.log('   Version ID: ' + pm.environment.get('ownerVersionId'));",
+                  "console.log('   Upload URL: ' + pm.environment.get('ownerUploadUrl'));"
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -374,14 +405,55 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Project Proposal Document\",\n  \"description\": \"Main project proposal for Q1 2025\",\n  \"filename\": \"proposal.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"size\": 1048576\n}"
+              "raw": "{\n  \"filename\": \"proposal.pdf\",\n  \"originalName\": \"Project Proposal Document.pdf\",\n  \"mimeType\": \"application/pdf\",\n  \"size\": 1048576,\n  \"checksum\": \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"\n}"
             },
             "url": {
               "raw": "{{BASE_URL}}/documents/initiate-upload",
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "initiate-upload"]
             }
-          }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload File to Storage (Owner)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ File uploaded to storage', () => {",
+                  "    pm.response.to.have.status(200);",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.storagePath).to.exist;",
+                  "    pm.expect(body.message).to.eql('File uploaded successfully');",
+                  "    pm.environment.set('ownerStoragePath', body.storagePath);",
+                  "});",
+                  "console.log('📁 File uploaded to: ' + pm.environment.get('ownerStoragePath'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{ownerUploadUrl}}",
+              "host": ["{{ownerUploadUrl}}"]
+            }
+          },
+          "response": []
         },
         {
           "name": "Confirm Document Upload (Owner)",
@@ -393,12 +465,16 @@
                   "pm.test('✅ Upload confirmed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.id).to.exist;",
+                  "    pm.expect(body.documentId).to.exist;",
+                  "    pm.expect(body.versionId).to.exist;",
                   "    pm.expect(body.status).to.eql('DRAFT');",
-                  "    pm.environment.set('ownerVersionId', body.versions[0].id);",
+                  "    pm.expect(body.document).to.exist;",
+                  "    pm.expect(body.version).to.exist;",
+                  "    pm.environment.set('ownerVersionId', body.versionId);",
                   "});",
                   "console.log('✅ Document upload confirmed');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -416,14 +492,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"documentId\": \"{{ownerDocId}}\",\n  \"contentRef\": \"{{ownerContentRef}}\"\n}"
+              "raw": "{\n  \"documentId\": \"{{ownerDocId}}\",\n  \"checksum\": \"{{ownerChecksum}}\",\n  \"storagePath\": \"{{ownerStoragePath}}\"\n}"
             },
             "url": {
               "raw": "{{BASE_URL}}/documents/confirm-upload",
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "confirm-upload"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Document Details (Owner)",
@@ -435,11 +512,14 @@
                   "pm.test('✅ Document details retrieved', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.id).to.eql(pm.environment.get('ownerDocId'));",
-                  "    pm.expect(body.title).to.eql('Project Proposal Document');",
+                  "    pm.expect(body.document.id).to.eql(pm.environment.get('ownerDocId'));",
+                  "    pm.expect(body.document.originalName).to.eql('Project Proposal Document.pdf');",
                   "});",
                   "console.log('📄 Document details fetched');"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -456,7 +536,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "List Owner's Documents",
@@ -468,11 +549,14 @@
                   "pm.test('✅ Owner documents listed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.items).to.be.an('array');",
-                  "    pm.expect(body.items.length).to.be.at.least(1);",
+                  "    pm.expect(body.documents).to.be.an('array');",
+                  "    pm.expect(body.documents.length).to.be.at.least(1);",
                   "});",
                   "console.log('📚 Owner documents listed');"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -489,7 +573,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Publish Document (Owner)",
@@ -504,7 +589,8 @@
                   "    pm.expect(body.status).to.eql('PUBLISHED');",
                   "});",
                   "console.log('📢 Document published');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -521,7 +607,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}", "publish"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Update Document (Owner)",
@@ -533,10 +620,14 @@
                   "pm.test('✅ Document updated', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.description).to.eql('Updated description with additional details');",
+                  "    pm.expect(body.id).to.exist;",
+                  "    pm.expect(body.originalName).to.eql('Updated Project Proposal Document.pdf');",
                   "});",
                   "console.log('📝 Document updated');"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -554,14 +645,15 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"description\": \"Updated description with additional details\"\n}"
+              "raw": "{\n  \"originalName\": \"Updated Project Proposal Document.pdf\",\n  \"filename\": \"proposal-v2.pdf\"\n}"
             },
             "url": {
               "raw": "{{BASE_URL}}/documents/{{ownerDocId}}",
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Search Documents (Owner)",
@@ -573,10 +665,13 @@
                   "pm.test('✅ Search results retrieved', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.items).to.be.an('array');",
+                  "    pm.expect(body.results).to.be.an('array');",
                   "});",
                   "console.log('🔍 Search completed');"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -599,7 +694,8 @@
                 }
               ]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -617,7 +713,8 @@
                   "    pm.response.to.have.status(403);",
                   "});",
                   "console.log('🚫 Access correctly denied');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -634,7 +731,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Owner: Grant READ Permission to Collab",
@@ -646,12 +744,14 @@
                   "pm.test('✅ READ permission granted', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.id).to.exist;",
-                  "    pm.expect(body.permission).to.eql('READ');",
-                  "    pm.environment.set('readPermissionId', body.id);",
+                  "    pm.expect(body.permission).to.exist;",
+                  "    pm.expect(body.permission.id).to.exist;",
+                  "    pm.expect(body.permission.permission).to.eql('READ');",
+                  "    pm.environment.set('readPermissionId', body.permission.id);",
                   "});",
-                  "console.log('✅ READ permission granted');"
-                ]
+                  "console.log('✅ READ permission granted: ' + pm.environment.get('readPermissionId'));"
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -676,7 +776,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["permissions", "grant"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Collab: Now Can Access Owner Doc",
@@ -688,10 +789,13 @@
                   "pm.test('✅ Can access with READ permission', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.id).to.eql(pm.environment.get('ownerDocId'));",
+                  "    pm.expect(body.document.id).to.eql(pm.environment.get('ownerDocId'));",
                   "});",
                   "console.log('✅ Access granted with READ permission');"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -708,7 +812,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Check Permission Exists",
@@ -724,7 +829,8 @@
                   "    pm.expect(body.permission).to.eql('READ');",
                   "});",
                   "console.log('✅ Permission verified');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -737,7 +843,7 @@
               }
             ],
             "url": {
-              "raw": "{{BASE_URL}}/permissions/check?documentId={{ownerDocId}}&userId={{collabUserId}}",
+              "raw": "{{BASE_URL}}/permissions/check?documentId={{ownerDocId}}&userId={{collabUserId}}&requiredPermission=READ",
               "host": ["{{BASE_URL}}"],
               "path": ["permissions", "check"],
               "query": [
@@ -748,10 +854,15 @@
                 {
                   "key": "userId",
                   "value": "{{collabUserId}}"
+                },
+                {
+                  "key": "requiredPermission",
+                  "value": "READ"
                 }
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "List Document Permissions",
@@ -763,11 +874,14 @@
                   "pm.test('✅ Permissions listed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.items).to.be.an('array');",
-                  "    pm.expect(body.items.length).to.be.at.least(1);",
+                  "    pm.expect(body.permissions).to.be.an('array');",
+                  "    pm.expect(body.permissions.length).to.be.at.least(1);",
                   "});",
                   "console.log('📋 Document permissions listed');"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -784,7 +898,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["permissions", "document", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Owner: Upgrade to WRITE Permission",
@@ -796,10 +911,12 @@
                   "pm.test('✅ Permission upgraded to WRITE', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
+                  "    pm.expect(body.id).to.exist;",
                   "    pm.expect(body.permission).to.eql('WRITE');",
                   "});",
                   "console.log('⬆️ Permission upgraded to WRITE');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -824,7 +941,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["permissions", "{{readPermissionId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "List User's Permissions",
@@ -836,10 +954,11 @@
                   "pm.test('✅ User permissions listed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
-                  "    pm.expect(body.items).to.be.an('array');",
+                  "    pm.expect(body.permissions).to.be.an('array');",
                   "});",
                   "console.log('📋 User permissions listed');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -856,7 +975,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["permissions", "user", "{{collabUserId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Owner: Revoke Permission",
@@ -869,7 +989,8 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "console.log('🚫 Permission revoked');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -886,7 +1007,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["permissions", "{{readPermissionId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Collab: Access Denied After Revoke",
@@ -899,7 +1021,8 @@
                   "    pm.response.to.have.status(403);",
                   "});",
                   "console.log('🚫 Access correctly denied after revocation');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -916,7 +1039,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -938,7 +1062,8 @@
                   "    pm.environment.set('metadataId1', body.id);",
                   "});",
                   "console.log('🏷️ Metadata added: author');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -963,7 +1088,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["metadata"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Add Metadata: Department",
@@ -978,7 +1104,8 @@
                   "    pm.environment.set('metadataId2', body.id);",
                   "});",
                   "console.log('🏷️ Metadata added: department');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1003,7 +1130,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["metadata"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get All Document Metadata",
@@ -1019,7 +1147,8 @@
                   "    pm.expect(body.items.length).to.be.at.least(2);",
                   "});",
                   "console.log('📋 All metadata retrieved');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1036,7 +1165,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["metadata", "document", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Get Metadata by Key",
@@ -1052,7 +1182,8 @@
                   "    pm.expect(body.value).to.eql('John Doe');",
                   "});",
                   "console.log('🔍 Metadata retrieved by key');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1075,7 +1206,8 @@
                 "author"
               ]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Update Metadata",
@@ -1090,7 +1222,8 @@
                   "    pm.expect(body.value).to.eql('Jane Smith');",
                   "});",
                   "console.log('✏️ Metadata updated');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1115,7 +1248,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["metadata", "{{metadataId1}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Metadata",
@@ -1128,7 +1262,8 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "console.log('🗑️ Metadata deleted');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1145,7 +1280,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["metadata", "{{metadataId2}}"]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -1168,7 +1304,8 @@
                   "    pm.environment.set('downloadToken', body.token);",
                   "});",
                   "console.log('🔗 Download link generated');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1193,7 +1330,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["downloads", "generate"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Validate Download Token",
@@ -1209,7 +1347,8 @@
                   "    pm.expect(body.documentId).to.exist;",
                   "});",
                   "console.log('✅ Token is valid');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1221,7 +1360,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["downloads", "validate", "{{downloadToken}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Download File (No Auth Required)",
@@ -1236,7 +1376,8 @@
                   "    pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');",
                   "});",
                   "console.log('⬇️ File downloaded successfully');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1248,7 +1389,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["downloads", "{{downloadToken}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Try Download Again (Should Fail - Used)",
@@ -1261,7 +1403,8 @@
                   "    pm.response.to.have.status(409);",
                   "});",
                   "console.log('🚫 Token correctly marked as used');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1273,7 +1416,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["downloads", "{{downloadToken}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Validate Invalid Token",
@@ -1288,7 +1432,8 @@
                   "    pm.expect(body.valid).to.be.false;",
                   "});",
                   "console.log('🚫 Invalid token correctly identified');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1300,7 +1445,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["downloads", "validate", "invalid-token-xyz123"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Cleanup Expired Tokens (Admin)",
@@ -1315,7 +1461,8 @@
                   "    pm.expect(body.deletedCount).to.exist;",
                   "});",
                   "console.log('🧹 Expired tokens cleaned up');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1332,7 +1479,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["downloads", "cleanup"]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -1352,7 +1500,8 @@
                   "    pm.expect(body.items).to.be.an('array');",
                   "});",
                   "console.log('👑 Admin viewing all documents');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1369,7 +1518,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "admin", "all"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Unpublish Document",
@@ -1384,7 +1534,8 @@
                   "    pm.expect(body.status).to.eql('DRAFT');",
                   "});",
                   "console.log('📝 Document unpublished');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1401,7 +1552,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}", "unpublish"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Update User Profile",
@@ -1414,7 +1566,8 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "console.log('👤 Profile updated');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1439,7 +1592,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users", "me"]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -1457,7 +1611,8 @@
                   "    pm.response.to.have.status(401);",
                   "});",
                   "console.log('🚫 Correctly requires authentication');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1469,7 +1624,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Invalid Token (Should Fail)",
@@ -1482,7 +1638,8 @@
                   "    pm.response.to.have.status(401);",
                   "});",
                   "console.log('🚫 Invalid token correctly rejected');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1499,7 +1656,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Non-existent Document (Should 404)",
@@ -1512,7 +1670,8 @@
                   "    pm.response.to.have.status(404);",
                   "});",
                   "console.log('🚫 Non-existent resource correctly handled');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1529,7 +1688,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "00000000-0000-0000-0000-000000000000"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Non-Owner Cannot Delete (Should 403)",
@@ -1542,7 +1702,8 @@
                   "    pm.response.to.have.status(403);",
                   "});",
                   "console.log('🚫 Non-owner deletion correctly blocked');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1559,7 +1720,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Non-Admin Cannot List All Users",
@@ -1572,7 +1734,8 @@
                   "    pm.response.to.have.status(403);",
                   "});",
                   "console.log('🚫 User list access restricted to admins only');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1589,7 +1752,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["users"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Non-Admin Cannot Cleanup Tokens",
@@ -1602,7 +1766,8 @@
                   "    pm.response.to.have.status(403);",
                   "});",
                   "console.log('🚫 Admin-only operation protected');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1619,7 +1784,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["downloads", "cleanup"]
             }
-          }
+          },
+          "response": []
         }
       ]
     },
@@ -1637,7 +1803,8 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "console.log('🗑️ Test document deleted');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1654,7 +1821,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "{{ownerDocId}}"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Delete Test Users (Admin)",
@@ -1664,7 +1832,8 @@
               "script": {
                 "exec": [
                   "console.log('🧹 Cleanup complete - Test users would be deleted in production');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1681,7 +1850,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["health"]
             }
-          }
+          },
+          "response": []
         },
         {
           "name": "Final Health Check",
@@ -1707,7 +1877,8 @@
                   "console.log('========================================');",
                   "console.log('🎉 All Systems Operational!');",
                   "console.log('========================================\\n');"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
           ],
@@ -1719,7 +1890,8 @@
               "host": ["{{BASE_URL}}"],
               "path": ["health"]
             }
-          }
+          },
+          "response": []
         }
       ]
     }
