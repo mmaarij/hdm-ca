@@ -12,6 +12,7 @@ import type {
   PermissionDomainError,
   MetadataDomainError,
 } from "../../../domain";
+import type { DownloadTokenDomainError } from "../../../domain/download-token/errors";
 import type {
   NotFoundError,
   AlreadyExistsError,
@@ -43,6 +44,7 @@ export const mapErrorToStatus = (
     | DocumentDomainError
     | PermissionDomainError
     | MetadataDomainError
+    | DownloadTokenDomainError
     | NotFoundError
     | AlreadyExistsError
     | ValidationError
@@ -100,6 +102,13 @@ export const mapErrorToStatus = (
             key: error.key,
           },
         };
+      case "DownloadTokenNotFoundError":
+        return {
+          status: 404,
+          error: "Not Found",
+          message: error.message || "Download token not found",
+          details: { tokenId: error.tokenId, token: error.token },
+        };
 
       // Conflict (409)
       case "UserAlreadyExistsError":
@@ -129,6 +138,20 @@ export const mapErrorToStatus = (
           error: "Conflict",
           message: error.message || "Metadata already exists",
           details: { documentId: error.documentId, key: error.key },
+        };
+      case "DownloadTokenAlreadyUsedError":
+        return {
+          status: 409,
+          error: "Conflict",
+          message: error.message || "Download token has already been used",
+          details: { token: error.token, usedAt: error.usedAt },
+        };
+      case "DownloadTokenExpiredError":
+        return {
+          status: 409,
+          error: "Conflict",
+          message: error.message || "Download token has expired",
+          details: { token: error.token, expiresAt: error.expiresAt },
         };
 
       // Unauthorized (401)
@@ -296,6 +319,33 @@ export const mapErrorToStatus = (
           message: error.message || "Infrastructure error occurred",
           details: { cause: error.cause },
         };
+    }
+  }
+
+  // Handle authentication/authorization errors from middleware (generic Error instances)
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+    if (message.includes("missing authorization header")) {
+      return {
+        status: 401,
+        error: "Unauthorized",
+        message: "Missing Authorization header",
+      };
+    }
+    if (message.includes("invalid authorization header")) {
+      return {
+        status: 401,
+        error: "Unauthorized",
+        message:
+          "Invalid Authorization header format. Expected: Bearer <token>",
+      };
+    }
+    if (message.includes("jwt") || message.includes("authentication token")) {
+      return {
+        status: 401,
+        error: "Unauthorized",
+        message: "Invalid or expired authentication token",
+      };
     }
   }
 

@@ -55,7 +55,8 @@ export class DownloadTokenExpiredError extends Data.TaggedError(
   "DownloadTokenExpiredError"
 )<{
   readonly message: string;
-  readonly tokenId: string;
+  readonly token: string;
+  readonly expiresAt: Date;
 }> {}
 
 export class DownloadTokenNotFoundError extends Data.TaggedError(
@@ -69,7 +70,8 @@ export class DownloadTokenAlreadyUsedError extends Data.TaggedError(
   "DownloadTokenAlreadyUsedError"
 )<{
   readonly message: string;
-  readonly tokenId: string;
+  readonly token: string;
+  readonly usedAt: Date;
 }> {}
 
 /**

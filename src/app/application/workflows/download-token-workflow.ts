@@ -255,7 +255,8 @@ export const DownloadTokenWorkflowLive = Layer.effect(
             return yield* Effect.fail(
               new DownloadTokenExpiredError({
                 message: "Download token has expired",
-                tokenId: token.id,
+                token: query.token,
+                expiresAt: expiresAt,
               })
             );
           }
@@ -265,7 +266,8 @@ export const DownloadTokenWorkflowLive = Layer.effect(
             return yield* Effect.fail(
               new DownloadTokenAlreadyUsedError({
                 message: "Download token has already been used",
-                tokenId: token.id,
+                token: query.token,
+                usedAt: new Date(token.usedAt),
               })
             );
           }
