@@ -7,8 +7,9 @@
 import { Effect, Layer } from "effect";
 import type {
   StoragePort,
-  PresignedUploadUrl,
   FileMetadata,
+  UploadedFile,
+  StoredFileInfo,
 } from "../../app/application/ports/storage.port";
 import { StoragePortTag } from "../../app/application/ports/storage.port";
 
@@ -82,27 +83,40 @@ export const createMockStorage = (state?: MockStorageState): StoragePort => {
   const storageState = state || new MockStorageState();
 
   return {
-    generatePresignedUploadUrl: (
-      filename: string,
-      mimeType: string
-    ): Effect.Effect<PresignedUploadUrl, Error> => {
-      const contentRef = `mock-upload-${Date.now()}-${filename}`;
-      const expiresAt = new Date(Date.now() + 3600000); // 1 hour
+    storeUploadedFile: (
+      file: UploadedFile,
+      documentId: string,
+      versionId: string
+    ): Effect.Effect<StoredFileInfo, Error> => {
+      const storagePath = `/storage/${documentId}/${versionId}/${file.name}`;
+      const filename = file.name.split("/").pop() || file.name;
+      const originalName = file.name;
+      const mimeType = file.type || "application/octet-stream";
+      const size = file.size;
 
-      storageState.registerUploadUrl(contentRef, expiresAt);
+      // Create mock file in storage
+      storageState.addFile(storagePath, Buffer.from("mock-content"), {
+        contentType: mimeType,
+        size,
+        lastModified: new Date(),
+      });
 
       return Effect.succeed({
-        url: `https://mock-storage.local/upload/${contentRef}`,
-        contentRef,
-        expiresAt,
+        path: storagePath,
+        filename,
+        originalName,
+        mimeType,
+        size,
       });
     },
 
-    moveToStorage: (
+    storeFile: (
       tempPath: string,
-      filename: string
+      filename: string,
+      documentId: string,
+      versionId: string
     ): Effect.Effect<string, Error> => {
-      const storagePath = `/storage/${Date.now()}-${filename}`;
+      const storagePath = `/storage/${documentId}/${versionId}/${filename}`;
 
       // Simulate moving file by creating a new entry
       const tempFile = storageState.getFile(tempPath);
@@ -210,4 +224,25 @@ export const verifyFileStored = (path: string): boolean => {
  */
 export const getAllStoredFiles = (): string[] => {
   return testStorageState.getAllFiles().map((f) => f.path);
+};
+
+/**
+ * Create a mock UploadedFile for testing
+ *
+ * @param name - The filename
+ * @param size - File size in bytes (default: 1024)
+ * @param type - MIME type (default: "application/pdf")
+ * @returns A mock UploadedFile object
+ */
+export const createMockUploadedFile = (
+  name: string,
+  size: number = 1024,
+  type: string = "application/pdf"
+): UploadedFile => {
+  return {
+    name,
+    size,
+    type,
+    arrayBuffer: async () => new ArrayBuffer(size),
+  };
 };

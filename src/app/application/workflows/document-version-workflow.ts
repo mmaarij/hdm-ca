@@ -136,29 +136,41 @@ export const DocumentVersionWorkflowLive = Layer.effect(
             );
           }
 
-          // Move file from temp to permanent storage
-          const storagePath = yield* storageService.moveToStorage(
-            command.path,
-            command.filename
+          // Get next version number
+          const latestVersionOpt = yield* documentRepo.getLatestVersion(
+            command.documentId
+          );
+          const versionNumber = Option.isSome(latestVersionOpt)
+            ? latestVersionOpt.value.versionNumber + 1
+            : 1;
+
+          // Create version record to get version ID (with temp values)
+          const tempVersion = yield* documentRepo.createVersion({
+            documentId: command.documentId,
+            filename: (command.file.name || "untitled") as any,
+            originalName: (command.file.name || "untitled") as any,
+            mimeType: (command.file.type || "application/octet-stream") as any,
+            size: command.file.size as any,
+            versionNumber: versionNumber as any,
+            uploadedBy: command.uploadedBy,
+          });
+
+          // Store file using storage adapter (auto-extracts metadata)
+          const storedFile = yield* storageService.storeUploadedFile(
+            command.file,
+            command.documentId,
+            tempVersion.id
           );
 
-          // Use DocumentService to add version (respects aggregate logic)
-          const version = yield* documentService.addVersion(
-            command.documentId,
-            {
-              filename: command.filename,
-              originalName: command.originalName,
-              mimeType: command.mimeType,
-              size: command.size,
-              path: storagePath as any,
-              uploadedBy: command.uploadedBy,
-            }
-          );
+          // Update version with accurate storage path
+          const version = yield* documentRepo.updateVersion(tempVersion.id, {
+            path: storedFile.path as any,
+          });
 
           // Update document's main metadata to reflect latest version
           yield* documentRepo.updateDocument(command.documentId, {
-            filename: command.filename,
-            originalName: command.originalName,
+            filename: storedFile.filename as any,
+            originalName: storedFile.originalName as any,
           });
 
           return {
@@ -177,7 +189,11 @@ export const DocumentVersionWorkflowLive = Layer.effect(
           };
         }),
         { documentId: command.documentId, uploadedBy: command.uploadedBy }
-      );
+      ) as Effect.Effect<
+        UploadNewVersionResponse,
+        NotFoundError | InsufficientPermissionError | Error,
+        never
+      >;
 
     const listVersions: DocumentVersionWorkflow["listVersions"] = (query) =>
       withUseCaseLogging(

@@ -23,11 +23,7 @@ import type {
   RegisterUserCommand,
   LoginUserCommand,
 } from "../app/application/dtos/user/request.dto";
-import type {
-  InitiateUploadCommand,
-  ConfirmUploadCommand,
-  UploadDocumentCommand,
-} from "../app/application/dtos/document/request.dto";
+import type { UploadDocumentCommand } from "../app/application/dtos/document/request.dto";
 import type {
   GrantPermissionCommand,
   RevokePermissionCommand,
@@ -99,7 +95,6 @@ export function makeTestDocument(overrides?: Partial<Document>): Document {
     mimeType: "application/pdf" as any,
     size: 1024 as any,
     path: `/uploads/${id}.pdf` as any,
-    status: "DRAFT" as any,
     uploadedBy: userId,
     createdAt: new Date() as any,
     updatedAt: new Date() as any,
@@ -362,46 +357,7 @@ export function makeLoginUserCommand(
 }
 
 /**
- * Create InitiateUploadCommand
- */
-export function makeInitiateUploadCommand(
-  overrides?: Partial<InitiateUploadCommand>
-): InitiateUploadCommand {
-  const userId = testUuid("user") as UserId;
-  const id = testUuid("file");
-
-  return {
-    filename: `test-file-${id}.pdf` as any,
-    originalName: `Test Document ${id}.pdf` as any,
-    mimeType: "application/pdf" as any,
-    size: 1024 as any,
-    checksum: `sha256-${id}` as any,
-    uploadedBy: userId,
-    ...overrides,
-  } as InitiateUploadCommand;
-}
-
-/**
- * Create ConfirmUploadCommand
- */
-export function makeConfirmUploadCommand(
-  overrides?: Partial<ConfirmUploadCommand>
-): ConfirmUploadCommand {
-  const docId = testUuid("doc") as DocumentId;
-  const userId = testUuid("user") as UserId;
-  const id = testUuid("file");
-
-  return {
-    documentId: docId,
-    userId,
-    checksum: `sha256-${id}` as any,
-    storagePath: `/uploads/${docId}.pdf` as any,
-    ...overrides,
-  } as ConfirmUploadCommand;
-}
-
-/**
- * Create UploadDocumentCommand (deprecated)
+ * Create UploadDocumentCommand
  */
 export function makeUploadDocumentCommand(
   overrides?: Partial<UploadDocumentCommand>
@@ -409,12 +365,16 @@ export function makeUploadDocumentCommand(
   const userId = testUuid("user") as UserId;
   const id = testUuid("file");
 
+  // Create a mock UploadedFile
+  const mockFile = {
+    name: `test-file-${id}.pdf`,
+    size: 1024,
+    type: "application/pdf",
+    arrayBuffer: async () => new ArrayBuffer(1024),
+  };
+
   return {
-    filename: `test-file-${id}.pdf` as any,
-    originalName: `Test Document ${id}.pdf` as any,
-    mimeType: "application/pdf" as any,
-    size: 1024 as any,
-    path: `/tmp/${id}.pdf` as any,
+    file: mockFile,
     uploadedBy: userId,
     ...overrides,
   } as UploadDocumentCommand;

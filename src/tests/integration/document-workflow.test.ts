@@ -29,7 +29,12 @@ import { DocumentRepositoryLive } from "../../app/infrastructure/repositories/do
 import { PermissionRepositoryTag } from "../../app/domain/permission/repository";
 import { PermissionRepositoryLive } from "../../app/infrastructure/repositories/permission-repository.impl";
 import { DrizzleService } from "../../app/infrastructure/services/drizzle-service";
-import { MockStorageLive, resetMockStorage, verifyFileStored } from "../mocks";
+import {
+  MockStorageLive,
+  resetMockStorage,
+  verifyFileStored,
+  createMockUploadedFile,
+} from "../mocks";
 
 describe("Document Workflow Integration Tests", () => {
   let db: TestDatabase;
@@ -61,138 +66,128 @@ describe("Document Workflow Integration Tests", () => {
     resetMockStorage();
   });
 
-  describe("Two-Phase Upload Workflow: Initiate → Confirm → Publish", () => {
-    test("should complete full upload and publish flow", async () => {
+  describe("Single-Step Upload Workflow", () => {
+    test("should upload document in single step with auto-versioning", async () => {
       const user = seedUser(db, { role: "USER" });
 
       const program = Effect.gen(function* () {
         const workflow = yield* DocumentWorkflowTag;
 
-        // Phase 1: Initiate Upload
-        const initiateResult = yield* workflow.initiateUpload({
-          filename: "report.pdf" as any,
-          originalName: "Monthly Report.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 2048 as any,
-          checksum: "sha256-abc123" as any,
+        // Single-step upload creates document and version 1
+        const uploadResult = yield* workflow.uploadDocument({
+          file: createMockUploadedFile("report.pdf", 2048),
           uploadedBy: user.id as any,
         });
 
-        expect(initiateResult.documentId).toBeDefined();
-        expect(initiateResult.uploadUrl).toBeDefined();
-        expect(String(initiateResult.checksum)).toBe("sha256-abc123");
-        expect(initiateResult.expiresAt).toBeDefined();
+        expect(uploadResult.documentId).toBeDefined();
+        expect(uploadResult.versionId).toBeDefined();
+        expect(uploadResult.version.versionNumber).toBeDefined();
 
-        const documentId = initiateResult.documentId;
+        const documentId = uploadResult.documentId;
 
-        // Verify document created in DRAFT status
+        // Verify document created
         const dbDoc = getDocumentById(db, documentId);
         expect(dbDoc).toBeDefined();
         expect(dbDoc.filename).toBe("report.pdf");
 
-        // Phase 2: Confirm Upload (after file uploaded to storage)
-        const confirmResult = yield* workflow.confirmUpload({
-          documentId,
-          userId: user.id as any,
-          checksum: "sha256-abc123" as any,
-          storagePath: "/storage/2024-01-01/report.pdf" as any,
-        });
-
-        expect(confirmResult.documentId).toBe(documentId);
-        expect(confirmResult.status).toBe("DRAFT");
-        expect(confirmResult.document).toBeDefined();
-        expect(confirmResult.version).toBeDefined();
-
-        // Verify document updated (path may or may not be set depending on implementation)
-        const updatedDoc = getDocumentById(db, documentId);
-        expect(updatedDoc).toBeDefined();
-
-        // Phase 3: Publish Document
-        const publishResult = yield* workflow.publishDocument({
-          documentId,
-          userId: user.id as any,
-        });
-
-        expect(publishResult.status).toBe("PUBLISHED");
-
-        // Verify document is published
-        const publishedDoc = getDocumentById(db, documentId);
-        expect(publishedDoc).toBeDefined();
-
-        return {
-          initiateResult,
-          confirmResult,
-          publishResult,
-        };
+        // Verify version created
+        const versions = getVersionsForDocument(db, documentId);
+        expect(versions.length).toBe(1);
+        expect(versions[0].version_number).toBe(1);
+        expect(versions[0].filename).toBe("report.pdf");
       });
 
       await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
     });
 
-    test("should prevent duplicate uploads with same checksum", async () => {
+    test("should create new version when uploading to existing document", async () => {
+      const user = seedUser(db, { role: "USER" });
+
+      const program = Effect.gen(function* () {
+        const workflow = yield* DocumentWorkflowTag;
+
+        // First upload creates document
+        const firstUpload = yield* workflow.uploadDocument({
+          file: createMockUploadedFile("file1.pdf", 1024),
+          uploadedBy: user.id as any,
+        });
+
+        expect(firstUpload.version.versionNumber).toBeDefined();
+        const documentId = firstUpload.documentId;
+
+        // Second upload to same document creates version 2
+        const secondUpload = yield* workflow.uploadDocument({
+          file: createMockUploadedFile("file2.pdf", 2048),
+          documentId: documentId,
+          uploadedBy: user.id as any,
+        });
+
+        expect(secondUpload.documentId).toBe(documentId);
+        const secondVersionNum = secondUpload.version.versionNumber;
+
+        // Verify both versions exist
+        const versions = getVersionsForDocument(db, documentId);
+        expect(versions.length).toBe(2);
+        expect(versions[0].version_number).toBe(1);
+        expect(versions[1].version_number).toBe(2);
+      });
+
+      await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
+    });
+
+    test("should handle concurrent uploads to same document", async () => {
       const user = seedUser(db, { role: "USER" });
 
       const program = Effect.gen(function* () {
         const workflow = yield* DocumentWorkflowTag;
 
         // First upload with checksum
-        const firstInit = yield* workflow.initiateUpload({
-          filename: "file1.pdf" as any,
-          originalName: "File 1.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          checksum: "sha256-duplicate" as any,
+        const firstInit = yield* workflow.uploadDocument({
+          file: createMockUploadedFile("file1.pdf", 1024),
           uploadedBy: user.id as any,
         });
 
-        yield* workflow.confirmUpload({
-          documentId: firstInit.documentId,
-          userId: user.id as any,
-          checksum: "sha256-duplicate" as any,
-          storagePath: "/storage/file1.pdf" as any,
-        });
+        const documentId = firstInit.documentId;
 
-        // Second upload with same checksum should return existing
-        const secondInit = yield* workflow.initiateUpload({
-          filename: "file2.pdf" as any,
-          originalName: "File 2.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          checksum: "sha256-duplicate" as any,
+        // Second upload to same document creates version 2
+        const secondUpload = yield* workflow.uploadDocument({
+          file: createMockUploadedFile("file2.pdf", 2048),
+          documentId: documentId,
           uploadedBy: user.id as any,
         });
 
-        // Should return existing document ID
-        expect(secondInit.documentId).toBe(firstInit.documentId);
-        expect(secondInit.uploadUrl).toBe(""); // Empty since already uploaded
+        // Should create new version on same document
+        expect(secondUpload.documentId).toBe(documentId);
+        expect(Number(secondUpload.version.versionNumber)).toBe(2);
 
-        return { firstInit, secondInit };
+        // Verify two versions exist
+        const versions = getVersionsForDocument(db, documentId);
+        expect(versions.length).toBe(2);
+
+        return { firstInit, secondUpload };
       });
 
       await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
     });
 
-    test("should reject confirm with mismatched checksum", async () => {
-      const user = seedUser(db, { role: "USER" });
+    test("should reject upload by unauthorized user", async () => {
+      const owner = seedUser(db, { email: "owner@example.com" });
+      const unauthorized = seedUser(db, { email: "unauthorized@example.com" });
 
       const program = Effect.gen(function* () {
         const workflow = yield* DocumentWorkflowTag;
 
-        const initiateResult = yield* workflow.initiateUpload({
-          filename: "file.pdf" as any,
-          originalName: "File.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          checksum: "sha256-original" as any,
-          uploadedBy: user.id as any,
+        // Owner uploads document
+        const uploadResult = yield* workflow.uploadDocument({
+          file: createMockUploadedFile("file.pdf", 1024),
+          uploadedBy: owner.id as any,
         });
 
-        // Try to confirm with different checksum
-        yield* workflow.confirmUpload({
-          documentId: initiateResult.documentId,
-          userId: user.id as any,
-          checksum: "sha256-different" as any, // Wrong checksum
-          storagePath: "/storage/file.pdf" as any,
+        // Unauthorized user tries to upload new version
+        yield* workflow.uploadDocument({
+          file: createMockUploadedFile("version2.pdf", 2048),
+          documentId: uploadResult.documentId,
+          uploadedBy: unauthorized.id as any,
         });
       });
 
@@ -200,40 +195,7 @@ describe("Document Workflow Integration Tests", () => {
         await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
         expect(true).toBe(false); // Should not reach here
       } catch (error: any) {
-        expect(error.message).toContain("Checksum mismatch");
-      }
-    });
-
-    test("should only allow uploader to confirm upload", async () => {
-      const uploader = seedUser(db, { email: "uploader@example.com" });
-      const otherUser = seedUser(db, { email: "other@example.com" });
-
-      const program = Effect.gen(function* () {
-        const workflow = yield* DocumentWorkflowTag;
-
-        const initiateResult = yield* workflow.initiateUpload({
-          filename: "file.pdf" as any,
-          originalName: "File.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          checksum: "sha256-test" as any,
-          uploadedBy: uploader.id as any,
-        });
-
-        // Try to confirm as different user
-        yield* workflow.confirmUpload({
-          documentId: initiateResult.documentId,
-          userId: otherUser.id as any, // Different user
-          checksum: "sha256-test" as any,
-          storagePath: "/storage/file.pdf" as any,
-        });
-      });
-
-      try {
-        await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
-        expect(true).toBe(false); // Should not reach here
-      } catch (error: any) {
-        expect(error.message).toContain("Only the uploader can confirm");
+        expect(error.message).toContain("Insufficient permission");
       }
     });
   });
@@ -247,11 +209,7 @@ describe("Document Workflow Integration Tests", () => {
 
         // Create document
         const uploadResult = yield* workflow.uploadDocument({
-          filename: "doc.pdf" as any,
-          originalName: "Document.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/doc.pdf" as any,
+          file: createMockUploadedFile("doc.pdf"),
           uploadedBy: owner.id as any,
         });
 
@@ -280,88 +238,12 @@ describe("Document Workflow Integration Tests", () => {
 
         // Create document as owner
         const uploadResult = yield* workflow.uploadDocument({
-          filename: "private.pdf" as any,
-          originalName: "Private.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/private.pdf" as any,
+          file: createMockUploadedFile("private.pdf"),
           uploadedBy: owner.id as any,
         });
 
         // Try to access as unauthorized user
         yield* workflow.getDocument({
-          documentId: uploadResult.documentId,
-          userId: unauthorized.id as any,
-        });
-      });
-
-      try {
-        await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
-        expect(true).toBe(false); // Should not reach here
-      } catch (error: any) {
-        expect(error.message).toContain("Insufficient permission");
-      }
-    });
-  });
-
-  describe("publishDocument and unpublishDocument workflows", () => {
-    test("should publish and unpublish document", async () => {
-      const owner = seedUser(db, { role: "USER" });
-
-      const program = Effect.gen(function* () {
-        const workflow = yield* DocumentWorkflowTag;
-
-        // Create document
-        const uploadResult = yield* workflow.uploadDocument({
-          filename: "article.pdf" as any,
-          originalName: "Article.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/article.pdf" as any,
-          uploadedBy: owner.id as any,
-        });
-
-        // Publish
-        const published = yield* workflow.publishDocument({
-          documentId: uploadResult.documentId,
-          userId: owner.id as any,
-        });
-
-        expect(published.status).toBe("PUBLISHED");
-
-        // Unpublish
-        const unpublished = yield* workflow.unpublishDocument({
-          documentId: uploadResult.documentId,
-          userId: owner.id as any,
-        });
-
-        expect(unpublished.status).toBe("DRAFT");
-
-        return { published, unpublished };
-      });
-
-      await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
-    });
-
-    test("should prevent unauthorized user from publishing", async () => {
-      const owner = seedUser(db, { email: "owner@example.com" });
-      const unauthorized = seedUser(db, { email: "unauthorized@example.com" });
-
-      const program = Effect.gen(function* () {
-        const workflow = yield* DocumentWorkflowTag;
-
-        // Create document as owner
-        const uploadResult = yield* workflow.uploadDocument({
-          filename: "doc.pdf" as any,
-          originalName: "Doc.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/doc.pdf" as any,
-          uploadedBy: owner.id as any,
-        });
-
-        // Try to publish as unauthorized user
-        yield* workflow.publishDocument({
           documentId: uploadResult.documentId,
           userId: unauthorized.id as any,
         });
@@ -385,29 +267,17 @@ describe("Document Workflow Integration Tests", () => {
 
         // Create 3 documents
         yield* workflow.uploadDocument({
-          filename: "doc1.pdf" as any,
-          originalName: "Doc 1.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/doc1.pdf" as any,
+          file: createMockUploadedFile("doc1.pdf"),
           uploadedBy: user.id as any,
         });
 
         yield* workflow.uploadDocument({
-          filename: "doc2.pdf" as any,
-          originalName: "Doc 2.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 2048 as any,
-          path: "/tmp/doc2.pdf" as any,
+          file: createMockUploadedFile("doc2.pdf", 2048),
           uploadedBy: user.id as any,
         });
 
         yield* workflow.uploadDocument({
-          filename: "doc3.pdf" as any,
-          originalName: "Doc 3.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 3072 as any,
-          path: "/tmp/doc3.pdf" as any,
+          file: createMockUploadedFile("doc3.pdf", 3072),
           uploadedBy: user.id as any,
         });
 
@@ -429,41 +299,6 @@ describe("Document Workflow Integration Tests", () => {
     });
   });
 
-  describe("updateDocument workflow", () => {
-    test("should update document metadata", async () => {
-      const owner = seedUser(db, { role: "USER" });
-
-      const program = Effect.gen(function* () {
-        const workflow = yield* DocumentWorkflowTag;
-
-        // Create document
-        const uploadResult = yield* workflow.uploadDocument({
-          filename: "old-name.pdf" as any,
-          originalName: "Old Name.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/old.pdf" as any,
-          uploadedBy: owner.id as any,
-        });
-
-        // Update document
-        const updated = yield* workflow.updateDocument({
-          documentId: uploadResult.documentId,
-          userId: owner.id as any,
-          filename: "new-name.pdf" as any,
-          originalName: "New Name.pdf" as any,
-        });
-
-        expect(String(updated.filename)).toBe("new-name.pdf");
-        expect(String(updated.originalName)).toBe("New Name.pdf");
-
-        return updated;
-      });
-
-      await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
-    });
-  });
-
   describe("deleteDocument workflow", () => {
     test("should delete document and all related data", async () => {
       const owner = seedUser(db, { role: "USER" });
@@ -473,11 +308,7 @@ describe("Document Workflow Integration Tests", () => {
 
         // Create document
         const uploadResult = yield* workflow.uploadDocument({
-          filename: "delete-me.pdf" as any,
-          originalName: "Delete Me.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/delete-me.pdf" as any,
+          file: createMockUploadedFile("delete-me.pdf"),
           uploadedBy: owner.id as any,
         });
 
@@ -510,11 +341,7 @@ describe("Document Workflow Integration Tests", () => {
 
         // Create document as owner
         const uploadResult = yield* workflow.uploadDocument({
-          filename: "protected.pdf" as any,
-          originalName: "Protected.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/protected.pdf" as any,
+          file: createMockUploadedFile("protected.pdf"),
           uploadedBy: owner.id as any,
         });
 

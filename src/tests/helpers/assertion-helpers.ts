@@ -59,9 +59,6 @@ export function assertDocumentMatches(
   if (expected.size !== undefined) {
     expect(actual.size).toBe(expected.size);
   }
-  if (expected.status !== undefined) {
-    expect(actual.status).toBe(expected.status);
-  }
   if (expected.uploadedBy !== undefined) {
     expect(actual.uploadedBy).toBe(expected.uploadedBy);
   }

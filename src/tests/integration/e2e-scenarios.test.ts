@@ -43,6 +43,7 @@ import {
   MockPasswordHasherLive,
   MockJwtLive,
   resetMockStorage,
+  createMockUploadedFile,
 } from "../mocks";
 
 describe("End-to-End Scenario Tests", () => {
@@ -121,38 +122,16 @@ describe("End-to-End Scenario Tests", () => {
           String(collaboratorRegister.user.email)
         );
 
-        // Step 3: Owner uploads document (Two-phase upload)
-        const initiateResult = yield* documentWorkflow.initiateUpload({
-          filename: "project-plan.pdf" as any,
-          originalName: "Project Plan.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 5120 as any,
-          checksum: "sha256-scenario-test" as any,
+        // Step 3: Owner uploads document (Single-step upload)
+        const uploadResult = yield* documentWorkflow.uploadDocument({
+          file: createMockUploadedFile("project-plan.pdf", 5120),
           uploadedBy: ownerId,
         });
 
-        console.log("✓ Upload initiated:", initiateResult.documentId);
+        const documentId = uploadResult.documentId;
+        console.log("✓ Document uploaded:", documentId);
 
-        const confirmResult = yield* documentWorkflow.confirmUpload({
-          documentId: initiateResult.documentId,
-          userId: ownerId,
-          checksum: "sha256-scenario-test" as any,
-          storagePath: "/storage/project-plan.pdf" as any,
-        });
-
-        const documentId = confirmResult.documentId;
-        console.log("✓ Upload confirmed:", documentId);
-
-        // Step 4: Owner publishes document
-        const publishResult = yield* documentWorkflow.publishDocument({
-          documentId,
-          userId: ownerId,
-        });
-
-        expect(publishResult.status).toBe("PUBLISHED");
-        console.log("✓ Document published");
-
-        // Step 5: Verify collaborator cannot access yet
+        // Step 4: Verify collaborator cannot access yet
         const accessAttempt = yield* Effect.either(
           documentWorkflow.getDocument({
             documentId,
@@ -163,7 +142,7 @@ describe("End-to-End Scenario Tests", () => {
         expect(accessAttempt._tag).toBe("Left"); // Should fail
         console.log("✓ Collaborator correctly denied access");
 
-        // Step 6: Owner grants READ permission to collaborator
+        // Step 5: Owner grants READ permission to collaborator
         const grantResult = yield* permissionWorkflow.grantPermission({
           documentId,
           userId: collaboratorId,
@@ -174,7 +153,7 @@ describe("End-to-End Scenario Tests", () => {
         expect(grantResult.permission.permission).toBe("READ");
         console.log("✓ Permission granted to collaborator");
 
-        // Step 7: Collaborator can now access document
+        // Step 6: Collaborator can now access document
         const collaboratorView = yield* documentWorkflow.getDocument({
           documentId,
           userId: collaboratorId,
@@ -186,18 +165,19 @@ describe("End-to-End Scenario Tests", () => {
         );
         console.log("✓ Collaborator successfully accessed document");
 
-        // Step 8: Verify collaborator cannot publish (no WRITE permission)
-        const publishAttempt = yield* Effect.either(
-          documentWorkflow.unpublishDocument({
+        // Step 7: Verify collaborator cannot upload new version (no WRITE permission)
+        const uploadAttempt = yield* Effect.either(
+          documentWorkflow.uploadDocument({
+            file: createMockUploadedFile("project-plan-v2.pdf", 6144),
             documentId,
-            userId: collaboratorId,
+            uploadedBy: collaboratorId,
           })
         );
 
-        expect(publishAttempt._tag).toBe("Left"); // Should fail
-        console.log("✓ Collaborator correctly denied publish access");
+        expect(uploadAttempt._tag).toBe("Left"); // Should fail
+        console.log("✓ Collaborator correctly denied upload access");
 
-        // Step 9: Owner upgrades collaborator to WRITE permission
+        // Step 8: Owner upgrades collaborator to WRITE permission
         const updatePermResult = yield* permissionWorkflow.grantPermission({
           documentId,
           userId: collaboratorId,
@@ -208,20 +188,23 @@ describe("End-to-End Scenario Tests", () => {
         expect(updatePermResult.permission.permission).toBe("WRITE");
         console.log("✓ Permission upgraded to WRITE");
 
-        // Step 10: Collaborator can now unpublish
-        const unpublishResult = yield* documentWorkflow.unpublishDocument({
+        // Step 9: Collaborator can now upload new version
+        const newVersionResult = yield* documentWorkflow.uploadDocument({
+          file: createMockUploadedFile("project-plan-v2.pdf", 6144),
           documentId,
-          userId: collaboratorId,
+          uploadedBy: collaboratorId,
         });
 
-        expect(unpublishResult.status).toBe("DRAFT");
-        console.log("✓ Collaborator successfully unpublished document");
+        expect(newVersionResult.documentId).toBe(documentId);
+        expect(Number(newVersionResult.version.versionNumber)).toBe(2);
+        console.log("✓ Collaborator successfully uploaded new version");
 
         return {
           owner: ownerRegister.user,
           collaborator: collaboratorRegister.user,
           document: collaboratorView.document,
           permission: updatePermResult.permission,
+          newVersion: newVersionResult.version,
         };
       });
 
@@ -234,6 +217,7 @@ describe("End-to-End Scenario Tests", () => {
       expect(result.collaborator.id).toBeDefined();
       expect(result.document.id).toBeDefined();
       expect(result.permission.permission).toBe("WRITE");
+      expect(Number(result.newVersion.versionNumber)).toBe(2);
     });
   });
 
@@ -255,11 +239,7 @@ describe("End-to-End Scenario Tests", () => {
 
         // Upload document
         const uploadResult = yield* documentWorkflow.uploadDocument({
-          filename: "research-paper.pdf" as any,
-          originalName: "Research Paper.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 10240 as any,
-          path: "/tmp/research.pdf" as any,
+          file: createMockUploadedFile("research-paper.pdf", 10240),
           uploadedBy: userId,
         });
 
@@ -371,30 +351,18 @@ describe("End-to-End Scenario Tests", () => {
 
         // User1 uploads 2 documents
         const user1Doc1 = yield* documentWorkflow.uploadDocument({
-          filename: "user1-doc1.pdf" as any,
-          originalName: "User1 Doc1.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 1024 as any,
-          path: "/tmp/u1d1.pdf" as any,
+          file: createMockUploadedFile("user1-doc1.pdf"),
           uploadedBy: user1.user.id,
         });
 
         const user1Doc2 = yield* documentWorkflow.uploadDocument({
-          filename: "user1-doc2.pdf" as any,
-          originalName: "User1 Doc2.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 2048 as any,
-          path: "/tmp/u1d2.pdf" as any,
+          file: createMockUploadedFile("user1-doc2.pdf", 2048),
           uploadedBy: user1.user.id,
         });
 
         // User2 uploads 1 document
         const user2Doc1 = yield* documentWorkflow.uploadDocument({
-          filename: "user2-doc1.pdf" as any,
-          originalName: "User2 Doc1.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 3072 as any,
-          path: "/tmp/u2d1.pdf" as any,
+          file: createMockUploadedFile("user2-doc1.pdf", 3072),
           uploadedBy: user2.user.id,
         });
 
@@ -480,7 +448,7 @@ describe("End-to-End Scenario Tests", () => {
   });
 
   describe("Complete Lifecycle Test", () => {
-    test("Document creation → collaboration → version control → archive", async () => {
+    test("Document creation → collaboration → version control → metadata", async () => {
       const program = Effect.gen(function* () {
         const userWorkflow = yield* UserWorkflowTag;
         const documentWorkflow = yield* DocumentWorkflowTag;
@@ -500,18 +468,15 @@ describe("End-to-End Scenario Tests", () => {
           role: "USER",
         });
 
-        // Phase 1: Document Creation
+        // Phase 1: Document Creation (version 1)
         const createResult = yield* documentWorkflow.uploadDocument({
-          filename: "project-v1.pdf" as any,
-          originalName: "Project Plan v1.pdf" as any,
-          mimeType: "application/pdf" as any,
-          size: 8192 as any,
-          path: "/tmp/project-v1.pdf" as any,
+          file: createMockUploadedFile("project-v1.pdf", 8192),
           uploadedBy: owner.user.id,
         });
 
         const documentId = createResult.documentId;
-        console.log("✓ Phase 1: Document created");
+        expect(Number(createResult.version.versionNumber)).toBe(1);
+        console.log("✓ Phase 1: Document created (version 1)");
 
         // Phase 2: Add initial metadata
         yield* metadataWorkflow.addMetadata({
@@ -560,15 +525,29 @@ describe("End-to-End Scenario Tests", () => {
 
         console.log("✓ Phase 4: Metadata updated by editor");
 
-        // Phase 5: Owner publishes
-        yield* documentWorkflow.publishDocument({
+        // Phase 5: Editor uploads new version (version 2)
+        const v2Result = yield* documentWorkflow.uploadDocument({
+          file: createMockUploadedFile("project-v2.pdf", 9216),
           documentId,
-          userId: owner.user.id,
+          uploadedBy: editor.user.id,
         });
 
-        console.log("✓ Phase 5: Document published");
+        expect(Number(v2Result.version.versionNumber)).toBe(2);
+        console.log("✓ Phase 5: New version uploaded by editor (version 2)");
 
-        // Phase 6: Update metadata to published
+        // Phase 6: Update metadata to reflect new version
+        const versionMetadata = metadata.metadata.find(
+          (m) => String(m.key) === "version"
+        );
+
+        if (versionMetadata) {
+          yield* metadataWorkflow.updateMetadata({
+            metadataId: versionMetadata.id,
+            userId: editor.user.id,
+            value: "2.0" as any,
+          });
+        }
+
         if (statusMetadata) {
           yield* metadataWorkflow.updateMetadata({
             metadataId: statusMetadata.id,
@@ -578,6 +557,16 @@ describe("End-to-End Scenario Tests", () => {
         }
 
         console.log("✓ Phase 6: Metadata reflects published status");
+
+        // Phase 7: Owner uploads final version (version 3)
+        const v3Result = yield* documentWorkflow.uploadDocument({
+          file: createMockUploadedFile("project-final.pdf", 10240),
+          documentId,
+          uploadedBy: owner.user.id,
+        });
+
+        expect(Number(v3Result.version.versionNumber)).toBe(3);
+        console.log("✓ Phase 7: Final version uploaded (version 3)");
 
         // Verify final state
         const finalDoc = yield* documentWorkflow.getDocument({
@@ -590,7 +579,9 @@ describe("End-to-End Scenario Tests", () => {
           userId: owner.user.id,
         });
 
-        expect(finalDoc.document.status).toBe("PUBLISHED");
+        expect(finalDoc.document.id).toBe(documentId);
+        expect(finalDoc.latestVersion).toBeDefined();
+        expect(Number(finalDoc.latestVersion!.versionNumber)).toBe(3);
         expect(finalMetadata.total).toBe(2);
 
         console.log("✓ Complete lifecycle test passed");
@@ -598,10 +589,16 @@ describe("End-to-End Scenario Tests", () => {
         return {
           document: finalDoc.document,
           metadata: finalMetadata.metadata,
+          latestVersion: finalDoc.latestVersion!,
         };
       });
 
-      await Effect.runPromise(program.pipe(Effect.provide(testLayer)));
+      const result = await Effect.runPromise(
+        program.pipe(Effect.provide(testLayer))
+      );
+
+      expect(Number(result.latestVersion.versionNumber)).toBe(3);
+      expect(result.metadata.length).toBe(2);
     });
   });
 });

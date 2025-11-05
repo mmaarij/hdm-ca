@@ -17,14 +17,13 @@ import {
 
 /**
  * Upload New Version Command
+ *
+ * Simplified to match document upload flow.
+ * File metadata is automatically extracted by the storage layer.
  */
 export const UploadNewVersionCommand = S.Struct({
   documentId: DocumentId,
-  filename: Filename,
-  originalName: Filename,
-  mimeType: MimeType,
-  size: FileSize,
-  path: FilePath, // Temporary storage path from upload
+  file: S.Any, // The uploaded file itself (type: UploadedFile)
   uploadedBy: UserId,
 });
 
