@@ -80,6 +80,7 @@ export type GetUserQuery = S.Schema.Type<typeof GetUserQuery>;
  * List Users Query
  */
 export const ListUsersQuery = S.Struct({
+  userId: UserId, // Requesting user ID for authorization
   page: S.optional(S.Number.pipe(S.positive())),
   limit: S.optional(S.Number.pipe(S.positive(), S.lessThanOrEqualTo(100))),
 });

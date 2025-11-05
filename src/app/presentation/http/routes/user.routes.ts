@@ -156,11 +156,12 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         const reqHeaders = Object.fromEntries(request.headers.entries());
         const effect = Effect.gen(function* () {
           const userWorkflow = yield* UserWorkflowTag;
-          yield* requireAuth();
-          const queryParams = yield* validateQuery(
-            UserDTOs.ListUsersQuery,
-            query
-          );
+          const auth = yield* requireAuth();
+
+          const queryParams = yield* validateQuery(UserDTOs.ListUsersQuery, {
+            ...query,
+            userId: auth.userId,
+          });
           const result = yield* userWorkflow.listUsers(queryParams);
           return result;
         });

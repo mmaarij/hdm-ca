@@ -1562,6 +1562,36 @@
           }
         },
         {
+          "name": "Non-Admin Cannot List All Users",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('✅ Non-admin cannot list all users', () => {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "console.log('🚫 User list access restricted to admins only');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ownerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/users",
+              "host": ["{{BASE_URL}}"],
+              "path": ["users"]
+            }
+          }
+        },
+        {
           "name": "Non-Admin Cannot Cleanup Tokens",
           "event": [
             {

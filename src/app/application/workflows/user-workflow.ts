@@ -262,28 +262,53 @@ export const UserWorkflowLive = Layer.effect(
       );
 
     const listUsers: UserWorkflow["listUsers"] = (query) =>
-      withUseCaseLogging(
+      withPerformanceTracking(
         "ListUsers",
-        Effect.gen(function* () {
-          const users = yield* userRepo.listAll();
+        withUseCaseLogging(
+          "ListUsers",
+          Effect.gen(function* () {
+            // Verify requesting user is admin
+            const requestingUserOpt = yield* userRepo.findById(query.userId);
+            if (Option.isNone(requestingUserOpt)) {
+              return yield* Effect.fail(
+                new NotFoundError({
+                  entityType: "User",
+                  id: query.userId,
+                  message: `User with ID ${query.userId} not found`,
+                })
+              );
+            }
 
-          // Simple pagination (in-memory)
-          const page = query.page ?? 1;
-          const limit = query.limit ?? 10;
-          const startIndex = (page - 1) * limit;
-          const endIndex = startIndex + limit;
+            const requestingUser = requestingUserOpt.value;
+            if (requestingUser.role !== "ADMIN") {
+              return yield* Effect.fail(
+                new ForbiddenError({
+                  message: "Only administrators can list all users",
+                  resource: "Users",
+                })
+              );
+            }
 
-          const paginatedUsers = users.slice(startIndex, endIndex);
-          const totalPages = Math.ceil(users.length / limit);
+            const users = yield* userRepo.listAll();
 
-          return {
-            users: paginatedUsers.map(({ password: _, ...user }) => user),
-            total: users.length,
-            page,
-            limit,
-            totalPages,
-          };
-        })
+            // Simple pagination (in-memory)
+            const page = query.page ?? 1;
+            const limit = query.limit ?? 10;
+            const startIndex = (page - 1) * limit;
+            const endIndex = startIndex + limit;
+
+            const paginatedUsers = users.slice(startIndex, endIndex);
+            const totalPages = Math.ceil(users.length / limit);
+
+            return {
+              users: paginatedUsers.map(({ password: _, ...user }) => user),
+              total: users.length,
+              page,
+              limit,
+              totalPages,
+            };
+          })
+        )
       );
 
     const deleteUser: UserWorkflow["deleteUser"] = (
