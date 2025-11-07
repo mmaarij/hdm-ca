@@ -5,7 +5,7 @@
  * Handles metadata CRUD with permission checks.
  */
 
-import { Effect, Option, Context, Layer } from "effect";
+import { Effect, Option, Context, Layer, pipe } from "effect";
 import { MetadataRepositoryTag } from "../../domain/metedata/repository";
 import { DocumentRepositoryTag } from "../../domain/document/repository";
 import { UserRepositoryTag } from "../../domain/user/repository";
@@ -16,9 +16,13 @@ import {
   DuplicateMetadataKeyError,
 } from "../utils/errors";
 import { withUseCaseLogging } from "../utils/logging";
-import { canWrite } from "../../domain/permission/access-service";
+import { loadEntity, loadEntities } from "../utils/effect-helpers";
+import {
+  requireReadPermission,
+  requireWritePermission,
+} from "../../domain/permission/service";
+import { DocumentMetadata, MetadataId } from "../../domain/metedata/entity";
 import { UserId, DocumentId } from "../../domain/refined/uuid";
-import { MetadataId } from "../../domain/metedata/entity";
 import type {
   AddMetadataCommand,
   UpdateMetadataCommand,
@@ -30,6 +34,7 @@ import type {
   MetadataResponse,
   ListMetadataResponse,
 } from "../dtos/metedata/response.dto";
+import { MetadataResponseMapper } from "../mappers/metadata.mapper";
 
 /**
  * Metadata Workflow Interface
@@ -104,402 +109,323 @@ export const MetadataWorkflowLive = Layer.effect(
     const addMetadata: MetadataWorkflow["addMetadata"] = (command) =>
       withUseCaseLogging(
         "AddMetadata",
-        Effect.gen(function* () {
-          // Verify document exists
-          const documentOpt = yield* documentRepo.findDocument(
-            command.documentId
-          );
-          if (Option.isNone(documentOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "Document",
-                id: command.documentId,
-                message: `Document with ID ${command.documentId} not found`,
-              })
-            );
-          }
-
-          const document = documentOpt.value;
-
-          // Verify user has write permission
-          const userOpt = yield* userRepo.findById(command.userId);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "User",
-                id: command.userId,
-                message: `User with ID ${command.userId} not found`,
-              })
-            );
-          }
-
-          const user = userOpt.value;
-          const permissions = yield* permissionRepo.findByDocument(
-            command.documentId
-          );
-
-          if (!canWrite(user, document, permissions)) {
-            return yield* Effect.fail(
-              new InsufficientPermissionError({
-                message: "Insufficient permission to add metadata",
-                requiredPermission: "WRITE",
-                resource: `Document:${command.documentId}`,
-              })
-            );
-          }
-
+        pipe(
+          // Load document, user, and existing metadata in parallel
+          Effect.all({
+            document: loadEntity(
+              documentRepo.findById(command.documentId),
+              "Document",
+              command.documentId
+            ),
+            user: loadEntity(
+              userRepo.findById(command.userId),
+              "User",
+              command.userId
+            ),
+            permissions: permissionRepo.findByDocument(command.documentId),
+            existingMetadata: metadataRepo.findByDocumentAndKey(
+              command.documentId,
+              command.key
+            ),
+          }),
+          Effect.mapError((e) =>
+            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
+          ),
           // Check for duplicate key
-          const existingMetadata = yield* metadataRepo.findByDocumentAndKey(
-            command.documentId,
-            command.key
-          );
-
-          if (Option.isSome(existingMetadata)) {
-            return yield* Effect.fail(
-              new DuplicateMetadataKeyError({
-                message: `Metadata with key "${command.key}" already exists for this document`,
-                key: command.key,
-                documentId: command.documentId,
-              })
-            );
-          }
-
-          // Create metadata
-          const metadata = yield* metadataRepo.create({
-            documentId: command.documentId,
-            key: command.key,
-            value: command.value,
-          });
-
+          Effect.flatMap(({ document, user, permissions, existingMetadata }) =>
+            Option.isSome(existingMetadata)
+              ? Effect.fail(
+                  new DuplicateMetadataKeyError({
+                    message: `Metadata with key "${command.key}" already exists for this document`,
+                    key: command.key,
+                    documentId: command.documentId,
+                  })
+                )
+              : Effect.succeed({ document, user, permissions })
+          ),
+          // Check write permission
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireWritePermission(user, document, permissions),
+              Effect.map(() => ({ document, user }))
+            )
+          ),
+          // Create and save metadata
+          Effect.flatMap(() => {
+            const newMetadata = DocumentMetadata.create({
+              documentId: command.documentId,
+              key: command.key as any,
+              value: command.value as any,
+            });
+            return metadataRepo.save(newMetadata);
+          }),
           // Add audit log
-          yield* documentRepo.addAudit({
-            documentId: command.documentId,
-            action: "metadata_added",
-            performedBy: command.userId,
-            details: `Metadata key "${command.key}" added`,
-          });
-
-          return {
-            id: metadata.id,
-            documentId: metadata.documentId,
-            key: metadata.key,
-            value: metadata.value,
-            createdAt: metadata.createdAt,
-          };
-        }),
+          Effect.tap((metadata) =>
+            documentRepo.addAudit(
+              command.documentId,
+              "metadata_added",
+              command.userId,
+              Option.some(`Metadata key "${command.key}" added`)
+            )
+          ),
+          // Map to response
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map((metadata) =>
+            MetadataResponseMapper.toMetadataResponse(metadata)
+          )
+        ),
         { documentId: command.documentId, userId: command.userId }
       );
 
     const updateMetadata: MetadataWorkflow["updateMetadata"] = (command) =>
       withUseCaseLogging(
         "UpdateMetadata",
-        Effect.gen(function* () {
-          // Get metadata
-          const metadataOpt = yield* metadataRepo.findById(command.metadataId);
-          if (Option.isNone(metadataOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "Metadata",
-                id: command.metadataId,
-                message: `Metadata with ID ${command.metadataId} not found`,
-              })
+        pipe(
+          // Load metadata first
+          loadEntity(
+            metadataRepo.findById(command.metadataId),
+            "Metadata",
+            command.metadataId
+          ),
+          Effect.mapError((e) =>
+            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
+          ),
+          // Load document, user, and permissions in parallel
+          Effect.flatMap((metadata) =>
+            pipe(
+              Effect.all({
+                document: loadEntity(
+                  documentRepo.findById(metadata.documentId),
+                  "Document",
+                  metadata.documentId
+                ),
+                user: loadEntity(
+                  userRepo.findById(command.userId),
+                  "User",
+                  command.userId
+                ),
+                permissions: permissionRepo.findByDocument(metadata.documentId),
+              }),
+              Effect.mapError((e) =>
+                "_tag" in e && e._tag === "NotFoundError"
+                  ? new NotFoundError(e)
+                  : e
+              ),
+              Effect.map(({ document, user, permissions }) => ({
+                metadata,
+                document,
+                user,
+                permissions,
+              }))
+            )
+          ),
+          // Check write permission
+          Effect.flatMap(({ metadata, document, user, permissions }) =>
+            pipe(
+              requireWritePermission(user, document, permissions),
+              Effect.map(() => metadata)
+            )
+          ),
+          // Update and save metadata
+          Effect.flatMap((metadata) => {
+            const updatedMetadata = DocumentMetadata.updateValue(
+              metadata,
+              command.value as any
             );
-          }
-
-          const metadata = metadataOpt.value;
-
-          // Verify document exists
-          const documentOpt = yield* documentRepo.findDocument(
-            metadata.documentId
-          );
-          if (Option.isNone(documentOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "Document",
-                id: metadata.documentId,
-                message: `Document with ID ${metadata.documentId} not found`,
-              })
+            return pipe(
+              metadataRepo.save(updatedMetadata),
+              Effect.map((saved) => ({ saved, metadata }))
             );
-          }
-
-          const document = documentOpt.value;
-
-          // Verify user has write permission
-          const userOpt = yield* userRepo.findById(command.userId);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "User",
-                id: command.userId,
-                message: `User with ID ${command.userId} not found`,
-              })
-            );
-          }
-
-          const user = userOpt.value;
-          const permissions = yield* permissionRepo.findByDocument(
-            metadata.documentId
-          );
-
-          if (!canWrite(user, document, permissions)) {
-            return yield* Effect.fail(
-              new InsufficientPermissionError({
-                message: "Insufficient permission to update metadata",
-                requiredPermission: "WRITE",
-                resource: `Document:${metadata.documentId}`,
-              })
-            );
-          }
-
-          // Update metadata
-          const updatedMetadata = yield* metadataRepo.update(
-            command.metadataId,
-            {
-              value: command.value,
-            }
-          );
-
+          }),
           // Add audit log
-          yield* documentRepo.addAudit({
-            documentId: metadata.documentId,
-            action: "metadata_updated",
-            performedBy: command.userId,
-            details: `Metadata key "${metadata.key}" updated`,
-          });
-
-          return {
-            id: updatedMetadata.id,
-            documentId: updatedMetadata.documentId,
-            key: updatedMetadata.key,
-            value: updatedMetadata.value,
-            createdAt: updatedMetadata.createdAt,
-          };
-        }),
+          Effect.tap(({ metadata }) =>
+            documentRepo.addAudit(
+              metadata.documentId,
+              "metadata_updated",
+              command.userId,
+              Option.some(`Metadata key "${metadata.key}" updated`)
+            )
+          ),
+          // Map to response
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map(({ saved }) =>
+            MetadataResponseMapper.toMetadataResponse(saved)
+          )
+        ),
         { metadataId: command.metadataId, userId: command.userId }
       );
 
     const deleteMetadata: MetadataWorkflow["deleteMetadata"] = (command) =>
       withUseCaseLogging(
         "DeleteMetadata",
-        Effect.gen(function* () {
-          // Get metadata
-          const metadataOpt = yield* metadataRepo.findById(command.metadataId);
-          if (Option.isNone(metadataOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "Metadata",
-                id: command.metadataId,
-                message: `Metadata with ID ${command.metadataId} not found`,
-              })
-            );
-          }
-
-          const metadata = metadataOpt.value;
-
-          // Verify document exists
-          const documentOpt = yield* documentRepo.findDocument(
-            metadata.documentId
-          );
-          if (Option.isNone(documentOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "Document",
-                id: metadata.documentId,
-                message: `Document with ID ${metadata.documentId} not found`,
-              })
-            );
-          }
-
-          const document = documentOpt.value;
-
-          // Verify user has write permission
-          const userOpt = yield* userRepo.findById(command.userId);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "User",
-                id: command.userId,
-                message: `User with ID ${command.userId} not found`,
-              })
-            );
-          }
-
-          const user = userOpt.value;
-          const permissions = yield* permissionRepo.findByDocument(
-            metadata.documentId
-          );
-
-          if (!canWrite(user, document, permissions)) {
-            return yield* Effect.fail(
-              new InsufficientPermissionError({
-                message: "Insufficient permission to delete metadata",
-                requiredPermission: "WRITE",
-                resource: `Document:${metadata.documentId}`,
-              })
-            );
-          }
-
+        pipe(
+          // Load metadata first
+          loadEntity(
+            metadataRepo.findById(command.metadataId),
+            "Metadata",
+            command.metadataId
+          ),
+          Effect.mapError((e) =>
+            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
+          ),
+          // Load document, user, and permissions in parallel
+          Effect.flatMap((metadata) =>
+            pipe(
+              Effect.all({
+                document: loadEntity(
+                  documentRepo.findById(metadata.documentId),
+                  "Document",
+                  metadata.documentId
+                ),
+                user: loadEntity(
+                  userRepo.findById(command.userId),
+                  "User",
+                  command.userId
+                ),
+                permissions: permissionRepo.findByDocument(metadata.documentId),
+              }),
+              Effect.mapError((e) =>
+                "_tag" in e && e._tag === "NotFoundError"
+                  ? new NotFoundError(e)
+                  : e
+              ),
+              Effect.map(({ document, user, permissions }) => ({
+                metadata,
+                document,
+                user,
+                permissions,
+              }))
+            )
+          ),
+          // Check write permission
+          Effect.flatMap(({ metadata, document, user, permissions }) =>
+            pipe(
+              requireWritePermission(user, document, permissions),
+              Effect.map(() => metadata)
+            )
+          ),
           // Delete metadata
-          yield* metadataRepo.delete(command.metadataId);
-
+          Effect.flatMap((metadata) =>
+            pipe(
+              metadataRepo.delete(command.metadataId),
+              Effect.map(() => metadata)
+            )
+          ),
           // Add audit log
-          yield* documentRepo.addAudit({
-            documentId: metadata.documentId,
-            action: "metadata_deleted",
-            performedBy: command.userId,
-            details: `Metadata key "${metadata.key}" deleted`,
-          });
-        }),
+          Effect.flatMap((metadata) =>
+            documentRepo.addAudit(
+              metadata.documentId,
+              "metadata_deleted",
+              command.userId,
+              Option.some(`Metadata key "${metadata.key}" deleted`)
+            )
+          ),
+          // Map errors
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
+        ),
         { metadataId: command.metadataId, userId: command.userId }
       );
 
     const listMetadata: MetadataWorkflow["listMetadata"] = (query) =>
       withUseCaseLogging(
         "ListMetadata",
-        Effect.gen(function* () {
-          // Verify document exists
-          const documentOpt = yield* documentRepo.findDocument(
-            query.documentId
-          );
-          if (Option.isNone(documentOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "Document",
-                id: query.documentId,
-                message: `Document with ID ${query.documentId} not found`,
-              })
-            );
-          }
-
-          const document = documentOpt.value;
-
-          // Verify user has at least read permission
-          const userOpt = yield* userRepo.findById(query.userId);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "User",
-                id: query.userId,
-                message: `User with ID ${query.userId} not found`,
-              })
-            );
-          }
-
-          const user = userOpt.value;
-          const permissions = yield* permissionRepo.findByDocument(
-            query.documentId
-          );
-
-          // Import canRead from access service
-          const { canRead } = yield* Effect.promise(
-            () => import("../../domain/permission/access-service")
-          );
-
-          if (!canRead(user, document, permissions)) {
-            return yield* Effect.fail(
-              new InsufficientPermissionError({
-                message: "Insufficient permission to view metadata",
-                requiredPermission: "READ",
-                resource: `Document:${query.documentId}`,
-              })
-            );
-          }
-
+        pipe(
+          // Load document, user, and permissions in parallel
+          Effect.all({
+            document: loadEntity(
+              documentRepo.findById(query.documentId),
+              "Document",
+              query.documentId
+            ),
+            user: loadEntity(
+              userRepo.findById(query.userId),
+              "User",
+              query.userId
+            ),
+            permissions: permissionRepo.findByDocument(query.documentId),
+          }),
+          Effect.mapError((e) =>
+            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
+          ),
+          // Check read permission
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireReadPermission(user, document, permissions),
+              Effect.map(() => document)
+            )
+          ),
           // Get metadata
-          const metadata = yield* metadataRepo.findByDocument(query.documentId);
-
-          return {
-            metadata: metadata.map((m) => ({
-              id: m.id,
-              documentId: m.documentId,
-              key: m.key,
-              value: m.value,
-              createdAt: m.createdAt,
-            })),
-            total: metadata.length,
-          };
-        }),
+          Effect.flatMap(() => metadataRepo.findByDocument(query.documentId)),
+          // Map to response
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map((metadata) =>
+            MetadataResponseMapper.toListMetadataResponse(metadata)
+          )
+        ),
         { documentId: query.documentId, userId: query.userId }
       );
 
     const getMetadataByKey: MetadataWorkflow["getMetadataByKey"] = (query) =>
       withUseCaseLogging(
         "GetMetadataByKey",
-        Effect.gen(function* () {
-          // Verify document exists
-          const documentOpt = yield* documentRepo.findDocument(
-            query.documentId
-          );
-          if (Option.isNone(documentOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "Document",
-                id: query.documentId,
-                message: `Document with ID ${query.documentId} not found`,
-              })
-            );
-          }
-
-          const document = documentOpt.value;
-
-          // Verify user has at least read permission
-          const userOpt = yield* userRepo.findById(query.userId);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "User",
-                id: query.userId,
-                message: `User with ID ${query.userId} not found`,
-              })
-            );
-          }
-
-          const user = userOpt.value;
-          const permissions = yield* permissionRepo.findByDocument(
-            query.documentId
-          );
-
-          // Import canRead from access service
-          const { canRead } = yield* Effect.promise(
-            () => import("../../domain/permission/access-service")
-          );
-
-          if (!canRead(user, document, permissions)) {
-            return yield* Effect.fail(
-              new InsufficientPermissionError({
-                message: "Insufficient permission to view metadata",
-                requiredPermission: "READ",
-                resource: `Document:${query.documentId}`,
-              })
-            );
-          }
-
+        pipe(
+          // Load document, user, and permissions in parallel
+          Effect.all({
+            document: loadEntity(
+              documentRepo.findById(query.documentId),
+              "Document",
+              query.documentId
+            ),
+            user: loadEntity(
+              userRepo.findById(query.userId),
+              "User",
+              query.userId
+            ),
+            permissions: permissionRepo.findByDocument(query.documentId),
+          }),
+          Effect.mapError((e) =>
+            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
+          ),
+          // Check read permission
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireReadPermission(user, document, permissions),
+              Effect.map(() => document)
+            )
+          ),
           // Get metadata by key
-          const metadataOpt = yield* metadataRepo.findByDocumentAndKey(
-            query.documentId,
-            query.key
-          );
-
-          if (Option.isNone(metadataOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "Metadata",
-                id: `${query.documentId}:${query.key}`,
-                message: `Metadata with key "${query.key}" not found for document ${query.documentId}`,
-              })
-            );
-          }
-
-          const metadata = metadataOpt.value;
-
-          return {
-            id: metadata.id,
-            documentId: metadata.documentId,
-            key: metadata.key,
-            value: metadata.value,
-            createdAt: metadata.createdAt,
-          };
-        }),
+          Effect.flatMap(() =>
+            metadataRepo.findByDocumentAndKey(query.documentId, query.key)
+          ),
+          Effect.flatMap(
+            Option.match({
+              onNone: () =>
+                Effect.fail(
+                  new NotFoundError({
+                    entityType: "Metadata",
+                    id: `${query.documentId}:${query.key}`,
+                    message: `Metadata with key "${query.key}" not found for document ${query.documentId}`,
+                  })
+                ),
+              onSome: (metadata: DocumentMetadata) => Effect.succeed(metadata),
+            })
+          ),
+          // Map to response
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map((metadata) =>
+            MetadataResponseMapper.toMetadataResponse(metadata)
+          )
+        ),
         { documentId: query.documentId, key: query.key, userId: query.userId }
       );
 

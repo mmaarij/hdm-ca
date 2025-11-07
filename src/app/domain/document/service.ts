@@ -1,81 +1,138 @@
-import { Effect, Option, Layer, Context } from "effect";
-import { DocumentId } from "../refined/uuid";
-import { DocumentRepository, DocumentRepositoryTag } from "./repository";
-import { DocumentAggregate } from "./aggregate";
-import { CreateDocumentVersionPayload, DocumentVersion } from "./entity";
-import { DocumentNotFoundError, DocumentDomainError } from "./errors";
+import { Effect, Option } from "effect";
+import { Document, DocumentVersion } from "./entity";
+import { DocumentUpdateError, DuplicateDocumentError } from "./errors";
+import {
+  Checksum,
+  ContentRef,
+  Filename,
+  MimeType,
+  FileSize,
+  VersionNumber,
+} from "./value-object";
+import { UserId } from "../refined/uuid";
 
 /**
- * DocumentService. This orchestrates aggregate + repository operations to
- * ensure DocumentVersion lifecycle is managed through the aggregate root.
+ * Document Domain Service - Pure Business Logic
+ *
+ * Pure domain service that works only with entities.
+ * No I/O operations, no repository calls.
+ * Contains business rules that span across the Document aggregate.
  */
-export interface DocumentService {
-  readonly addVersion: (
-    documentId: DocumentId,
-    payload: Omit<
-      CreateDocumentVersionPayload,
-      "documentId" | "versionNumber"
-    > &
-      Partial<Pick<CreateDocumentVersionPayload, "id">>
-  ) => Effect.Effect<DocumentVersion, DocumentDomainError>;
+export interface DocumentDomainService {
+  /**
+   * Validate that new content doesn't create a duplicate version
+   */
+  readonly validateNoDuplicateContent: (
+    existingVersions: readonly DocumentVersion[],
+    newChecksum: Checksum
+  ) => Effect.Effect<void, DuplicateDocumentError>;
+
+  /**
+   * Prepare a new version for a document (business logic for version creation)
+   */
+  readonly prepareNewVersion: (
+    document: Document,
+    versionProps: {
+      filename: Filename;
+      originalName: Filename;
+      mimeType: MimeType;
+      size: FileSize;
+      uploadedBy: UserId;
+      contentRef?: ContentRef;
+      checksum?: Checksum;
+    }
+  ) => Effect.Effect<DocumentVersion, DuplicateDocumentError>;
+
+  /**
+   * Validate that a user can update a document (business rule)
+   */
+  readonly canUpdate: (
+    document: Document,
+    userId: UserId,
+    isAdmin: boolean
+  ) => Effect.Effect<void, DocumentUpdateError>;
+
+  /**
+   * Calculate the next version number for a document
+   */
+  readonly getNextVersionNumber: (
+    document: Document
+  ) => Effect.Effect<VersionNumber, never>;
+
+  /**
+   * Check if a version with given checksum already exists
+   */
+  readonly hasVersionWithChecksum: (
+    document: Document,
+    checksum: Checksum
+  ) => Effect.Effect<boolean, never>;
 }
 
-export const DocumentServiceTag = Context.GenericTag<DocumentService>(
-  "@app/DocumentService"
-);
-
 /**
- * Live implementation of DocumentService that uses the repository from
- * context. This keeps orchestration logic in the domain so callers don't
- * manipulate versions directly.
+ * Live implementation of Document Domain Service
  */
-export const DocumentServiceLive = Layer.effect(
-  DocumentServiceTag,
-  Effect.gen(function* () {
-    const repo = yield* DocumentRepositoryTag;
+export const DocumentDomainServiceLive: DocumentDomainService = {
+  validateNoDuplicateContent: (existingVersions, newChecksum) => {
+    const duplicate = existingVersions.find((v) =>
+      Option.exists(v.checksum, (cs) => cs === newChecksum)
+    );
 
-    const addVersion: DocumentService["addVersion"] = (documentId, payload) =>
-      Effect.gen(function* () {
-        // Load document
-        const docOpt = yield* repo.findDocument(documentId);
-        if (Option.isNone(docOpt)) {
-          return yield* Effect.fail(
-            new DocumentNotFoundError({
-              documentId,
-              message: "Document not found",
-            })
-          );
-        }
+    return duplicate
+      ? Effect.fail(
+          new DuplicateDocumentError({
+            message: "Document with this content already exists",
+            checksum: newChecksum,
+          })
+        )
+      : Effect.void;
+  },
 
-        const document = docOpt.value;
+  prepareNewVersion: (document, versionProps) =>
+    Effect.gen(function* () {
+      // Validate no duplicate content if checksum provided
+      if (versionProps.checksum) {
+        yield* DocumentDomainServiceLive.validateNoDuplicateContent(
+          document.versions,
+          versionProps.checksum
+        );
+      }
 
-        // Load existing versions
-        const versions = yield* repo.listVersions(documentId);
+      // Get next version number
+      const versionNumber =
+        yield* DocumentDomainServiceLive.getNextVersionNumber(document);
 
-        // Build aggregate and prepare payload
-        const agg = DocumentAggregate.from(document, versions);
-        const createPayload = agg.prepareAddVersion(payload as any);
-
-        // Persist version
-        const persisted = yield* repo.createVersion(createPayload);
-
-        // Attach persisted version to aggregate (in-memory)
-        const updated = agg.attachVersion(persisted);
-
-        // Add audit entry (best-effort via repository)
-        yield* repo.addAudit({
-          documentId,
-          action: "version_added",
-          performedBy: persisted.uploadedBy,
-          details: `version ${persisted.versionNumber} added`,
-        } as any);
-
-        // Return persisted version
-        return persisted;
+      // Create version entity
+      return DocumentVersion.create({
+        documentId: document.id,
+        filename: versionProps.filename,
+        originalName: versionProps.originalName,
+        mimeType: versionProps.mimeType,
+        size: versionProps.size,
+        versionNumber,
+        uploadedBy: versionProps.uploadedBy,
+        contentRef: versionProps.contentRef,
+        checksum: versionProps.checksum,
       });
+    }),
 
-    return { addVersion } satisfies DocumentService;
-  })
-);
+  canUpdate: (document, userId, isAdmin) => {
+    if (!isAdmin && document.uploadedBy !== userId) {
+      return Effect.fail(
+        new DocumentUpdateError({
+          message: "User does not have permission to update this document",
+        })
+      );
+    }
+    return Effect.void;
+  },
 
-export type { DocumentVersion, CreateDocumentVersionPayload };
+  getNextVersionNumber: (document) =>
+    Effect.succeed((document.versions.length + 1) as VersionNumber),
+
+  hasVersionWithChecksum: (document, checksum) =>
+    Effect.succeed(
+      document.versions.some((v) =>
+        Option.exists(v.checksum, (cs) => cs === checksum)
+      )
+    ),
+};

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { DownloadToken } from "./entity";
 import { isTokenExpired, isTokenUsed } from "./value-object";
 import {
@@ -37,7 +37,7 @@ export const guardTokenNotUsed = (
     : Effect.fail(
         new DownloadTokenAlreadyUsedError({
           token: token.token,
-          usedAt: token.usedAt!,
+          usedAt: Option.getOrElse(token.usedAt, () => new Date()),
           message: "Download token has already been used",
         })
       );

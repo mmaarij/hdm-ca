@@ -1,19 +1,15 @@
-import { Schema as S } from "effect";
-import {
-  DocumentMetadata,
-  CreateMetadataPayload,
-  UpdateMetadataPayload,
-} from "./entity";
-
 /**
- * Runtime validators for Metadata domain
+ * Metadata Schema
+ *
+ * This file is reserved for Effect Schema validators if needed in the future.
+ * Currently, we use TypeScript types for compile-time validation and
+ * entity factory functions for runtime construction.
+ *
+ * Domain validation happens through:
+ * - Entity factory functions (DocumentMetadata.create, DocumentMetadata.updateValue)
+ * - Domain guards (in guards.ts)
+ * - Value objects with branded types
  */
 
-export const validateMetadata = (input: unknown) =>
-  S.decodeUnknown(DocumentMetadata)(input);
-
-export const validateCreateMetadataPayload = (input: unknown) =>
-  S.decodeUnknown(CreateMetadataPayload)(input);
-
-export const validateUpdateMetadataPayload = (input: unknown) =>
-  S.decodeUnknown(UpdateMetadataPayload)(input);
+// Export placeholder to make this a valid module
+export {};

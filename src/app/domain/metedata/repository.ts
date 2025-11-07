@@ -1,10 +1,5 @@
 import { Effect, Option, Context } from "effect";
-import {
-  DocumentMetadata,
-  CreateMetadataPayload,
-  UpdateMetadataPayload,
-  MetadataId,
-} from "./entity";
+import { DocumentMetadata, MetadataId } from "./entity";
 import { MetadataDomainError } from "./errors";
 import { DocumentId } from "../refined/uuid";
 
@@ -12,13 +7,14 @@ import { DocumentId } from "../refined/uuid";
  * Metadata Repository Interface
  *
  * Defines the contract for metadata data persistence operations.
+ * Repositories work with entities, not payloads.
  */
 export interface MetadataRepository {
   /**
-   * Create a new metadata entry
+   * Save a metadata entry (create or update)
    */
-  readonly create: (
-    payload: CreateMetadataPayload
+  readonly save: (
+    metadata: DocumentMetadata
   ) => Effect.Effect<DocumentMetadata, MetadataDomainError>;
 
   /**
@@ -42,14 +38,6 @@ export interface MetadataRepository {
   readonly findByDocument: (
     documentId: DocumentId
   ) => Effect.Effect<readonly DocumentMetadata[], MetadataDomainError>;
-
-  /**
-   * Update metadata
-   */
-  readonly update: (
-    id: MetadataId,
-    payload: UpdateMetadataPayload
-  ) => Effect.Effect<DocumentMetadata, MetadataDomainError>;
 
   /**
    * Delete metadata

@@ -1,5 +1,5 @@
 import { Effect, Option, Context } from "effect";
-import { DownloadToken, CreateDownloadTokenPayload } from "./entity";
+import { DownloadToken } from "./entity";
 import { DownloadTokenDomainError } from "./errors";
 import { DownloadTokenId, DocumentId } from "../refined/uuid";
 import { Token } from "./value-object";
@@ -8,13 +8,14 @@ import { Token } from "./value-object";
  * Download Token Repository Interface
  *
  * Defines the contract for download token data persistence operations.
+ * Repositories work with entities, not payloads.
  */
 export interface DownloadTokenRepository {
   /**
-   * Create a new download token
+   * Save a download token (create or update)
    */
-  readonly create: (
-    payload: CreateDownloadTokenPayload
+  readonly save: (
+    token: DownloadToken
   ) => Effect.Effect<DownloadToken, DownloadTokenDomainError>;
 
   /**
@@ -37,13 +38,6 @@ export interface DownloadTokenRepository {
   readonly findByDocument: (
     documentId: DocumentId
   ) => Effect.Effect<readonly DownloadToken[], DownloadTokenDomainError>;
-
-  /**
-   * Mark token as used
-   */
-  readonly markAsUsed: (
-    id: DownloadTokenId
-  ) => Effect.Effect<DownloadToken, DownloadTokenDomainError>;
 
   /**
    * Delete token

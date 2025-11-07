@@ -1,8 +1,9 @@
-import { Schema as S } from "effect";
+import { Schema as S, Option } from "effect";
 import { DocumentId } from "../refined/uuid";
 import { Uuid } from "../refined/uuid";
 import { DateTime } from "../refined/date-time";
 import { MetadataKey, MetadataValue } from "./value-object";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Metadata ID Schema
@@ -11,40 +12,17 @@ export const MetadataId = Uuid.pipe(S.brand("MetadataId"));
 export type MetadataId = S.Schema.Type<typeof MetadataId>;
 
 /**
- * Document Metadata Entity
+ * Document Metadata Entity - Pure Domain Model
  *
  * Represents a key-value metadata entry for a document.
  */
-export const DocumentMetadata = S.Struct({
-  id: MetadataId,
-  documentId: DocumentId,
-  key: MetadataKey,
-  value: MetadataValue,
-  createdAt: S.optional(DateTime),
-});
-
-export type DocumentMetadata = S.Schema.Type<typeof DocumentMetadata>;
-
-/**
- * Create Metadata payload
- */
-export const CreateMetadataPayload = S.Struct({
-  id: S.optional(MetadataId),
-  documentId: DocumentId,
-  key: MetadataKey,
-  value: MetadataValue,
-});
-
-export type CreateMetadataPayload = S.Schema.Type<typeof CreateMetadataPayload>;
-
-/**
- * Update Metadata payload
- */
-export const UpdateMetadataPayload = S.Struct({
-  value: MetadataValue,
-});
-
-export type UpdateMetadataPayload = S.Schema.Type<typeof UpdateMetadataPayload>;
+export interface DocumentMetadata {
+  readonly id: MetadataId;
+  readonly documentId: DocumentId;
+  readonly key: MetadataKey;
+  readonly value: MetadataValue;
+  readonly createdAt: Date;
+}
 
 /**
  * Metadata map (for convenience)
@@ -52,24 +30,67 @@ export type UpdateMetadataPayload = S.Schema.Type<typeof UpdateMetadataPayload>;
 export type MetadataMap = Record<string, string>;
 
 /**
- * Convert metadata array to map
+ * Factory functions for DocumentMetadata entity
  */
-export const toMetadataMap = (
-  metadata: readonly DocumentMetadata[]
-): MetadataMap => {
-  return Object.fromEntries(metadata.map((m) => [m.key, m.value]));
+export const DocumentMetadata = {
+  /**
+   * Create a new metadata entry
+   */
+  create: (props: {
+    documentId: DocumentId;
+    key: MetadataKey;
+    value: MetadataValue;
+  }): DocumentMetadata => ({
+    id: uuidv4() as MetadataId,
+    documentId: props.documentId,
+    key: props.key,
+    value: props.value,
+    createdAt: new Date(),
+  }),
+
+  /**
+   * Update metadata value
+   */
+  updateValue: (
+    metadata: DocumentMetadata,
+    newValue: MetadataValue
+  ): DocumentMetadata => ({
+    ...metadata,
+    value: newValue,
+  }),
+
+  /**
+   * Convert metadata array to map
+   */
+  toMap: (metadata: readonly DocumentMetadata[]): MetadataMap => {
+    return Object.fromEntries(metadata.map((m) => [m.key, m.value]));
+  },
+
+  /**
+   * Create metadata entries from map
+   */
+  fromMap: (documentId: DocumentId, map: MetadataMap): DocumentMetadata[] => {
+    return Object.entries(map).map(([key, value]) =>
+      DocumentMetadata.create({
+        documentId,
+        key: key as MetadataKey,
+        value: value as MetadataValue,
+      })
+    );
+  },
 };
 
+// ============================================================================
+// Schema Definitions for Validation (kept for backward compatibility)
+// ============================================================================
+
 /**
- * Convert metadata map to array
+ * DocumentMetadata Schema for validation
  */
-export const fromMetadataMap = (
+export const DocumentMetadataSchema = S.Struct({
+  id: MetadataId,
   documentId: DocumentId,
-  map: MetadataMap
-): CreateMetadataPayload[] => {
-  return Object.entries(map).map(([key, value]) => ({
-    documentId,
-    key: key as MetadataKey,
-    value: value as MetadataValue,
-  }));
-};
+  key: MetadataKey,
+  value: MetadataValue,
+  createdAt: S.optional(DateTime),
+});

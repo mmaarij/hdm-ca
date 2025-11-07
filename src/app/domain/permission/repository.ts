@@ -1,10 +1,5 @@
 import { Effect, Option, Context } from "effect";
-import {
-  DocumentPermission,
-  CreatePermissionPayload,
-  UpdatePermissionPayload,
-  PermissionId,
-} from "./entity";
+import { DocumentPermission, PermissionId } from "./entity";
 import { PermissionDomainError } from "./errors";
 import { DocumentId, UserId } from "../refined/uuid";
 import { PermissionType } from "./value-object";
@@ -13,13 +8,14 @@ import { PermissionType } from "./value-object";
  * Permission Repository Interface
  *
  * Defines the contract for permission data persistence operations.
+ * Repositories work with entities, not payloads.
  */
 export interface PermissionRepository {
   /**
-   * Create a new permission
+   * Save a permission (create or update)
    */
-  readonly create: (
-    payload: CreatePermissionPayload
+  readonly save: (
+    permission: DocumentPermission
   ) => Effect.Effect<DocumentPermission, PermissionDomainError>;
 
   /**
@@ -50,14 +46,6 @@ export interface PermissionRepository {
   readonly findByUser: (
     userId: UserId
   ) => Effect.Effect<readonly DocumentPermission[], PermissionDomainError>;
-
-  /**
-   * Update permission
-   */
-  readonly update: (
-    id: PermissionId,
-    payload: UpdatePermissionPayload
-  ) => Effect.Effect<DocumentPermission, PermissionDomainError>;
 
   /**
    * Delete permission

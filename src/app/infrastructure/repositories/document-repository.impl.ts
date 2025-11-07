@@ -1,576 +1,568 @@
-import { Effect, Option, Layer } from "effect";
-import { eq, desc, like, or, count as drizzleCount } from "drizzle-orm";
+import { Effect, Option, Layer, pipe } from "effect";
+import { eq, desc, asc, like, or, count as drizzleCount } from "drizzle-orm";
 import {
   DocumentRepository,
   DocumentRepositoryTag,
 } from "../../domain/document/repository";
-import {
-  Document,
-  DocumentVersion,
-  CreateDocumentPayload,
-  CreateDocumentVersionPayload,
-  UpdateDocumentPayload,
-  DocumentWithVersion,
-} from "../../domain/document/entity";
-import {
-  DocumentId,
-  DocumentVersionId,
-  UserId,
-} from "../../domain/refined/uuid";
+import { Document, DocumentWithVersion } from "../../domain/document/entity";
+import { DocumentId, UserId } from "../../domain/refined/uuid";
 import {
   DocumentNotFoundError,
-  DocumentVersionNotFoundError,
-  DocumentAlreadyExistsError,
   DocumentConstraintError,
+  DocumentInfrastructureError,
 } from "../../domain/document/errors";
 import { DrizzleService } from "../services/drizzle-service";
 import { documents, documentVersions, documentAudit } from "../models";
-import { v4 as uuid } from "uuid";
+import {
+  DocumentMapper,
+  DocumentVersionMapper,
+} from "../mappers/document.mapper";
 import { detectDbConstraint } from "../../domain/shared/base.repository";
 
+/**
+ * Document Repository Implementation using Drizzle ORM
+ *
+ * Handles the Document aggregate including all versions.
+ * Document is the aggregate root - versions are always loaded with the document.
+ */
 export const DocumentRepositoryLive = Layer.effect(
   DocumentRepositoryTag,
   Effect.gen(function* () {
     const { db } = yield* DrizzleService;
 
-    const createDocument: DocumentRepository["createDocument"] = (payload) =>
-      Effect.gen(function* () {
-        const id = payload.id || (uuid() as DocumentId);
-
-        yield* Effect.tryPromise({
+    /**
+     * Save a document aggregate (document + all versions)
+     * Handles both creation and updates
+     */
+    const save: DocumentRepository["save"] = (document) =>
+      pipe(
+        // Check if document exists
+        Effect.tryPromise({
           try: () =>
-            db.insert(documents).values({
-              id,
-              filename: payload.filename,
-              originalName: payload.originalName,
-              mimeType: payload.mimeType,
-              size: payload.size,
-              path: payload.path || undefined,
-              uploadedBy: payload.uploadedBy,
+            db.query.documents.findFirst({
+              where: eq(documents.id, document.id),
             }),
-          catch: (error) => {
-            const constraintType = detectDbConstraint(error);
-            if (constraintType === "unique") {
-              return new DocumentAlreadyExistsError({
-                documentId: id,
-                message: "Document with this filename already exists",
+          catch: () =>
+            new DocumentInfrastructureError({
+              message: "Database connection error",
+            }),
+        }),
+        Effect.flatMap((existingDocRow) => {
+          if (existingDocRow) {
+            // Update existing document
+            const updateData = DocumentMapper.toDbUpdate(document);
+            return Effect.tryPromise({
+              try: () =>
+                db
+                  .update(documents)
+                  .set(updateData)
+                  .where(eq(documents.id, document.id)),
+              catch: () =>
+                new DocumentConstraintError({
+                  message: "Database constraint violation",
+                }),
+            });
+          } else {
+            // Create new document
+            const createData = DocumentMapper.toDbCreate(document);
+            return Effect.tryPromise({
+              try: () => db.insert(documents).values(createData),
+              catch: (error) => {
+                const constraintType = detectDbConstraint(error);
+                if (constraintType === "unique") {
+                  return new DocumentConstraintError({
+                    message: "Document with this filename already exists",
+                  });
+                }
+                return new DocumentConstraintError({
+                  message: "Database constraint violation",
+                });
+              },
+            });
+          }
+        }),
+        // Save all versions - get existing version IDs
+        Effect.flatMap(() =>
+          Effect.tryPromise({
+            try: () =>
+              db.query.documentVersions.findMany({
+                where: eq(documentVersions.documentId, document.id),
+              }),
+            catch: () =>
+              new DocumentInfrastructureError({
+                message: "Database connection error",
+              }),
+          })
+        ),
+        Effect.flatMap((existingVersionRows) => {
+          const existingVersionIds = new Set(
+            existingVersionRows.map((v) => v.id)
+          );
+
+          // Upsert each version in the document
+          const versionEffects = document.versions.map((version) => {
+            if (existingVersionIds.has(version.id)) {
+              // Update existing version
+              const versionUpdate = DocumentVersionMapper.toDbUpdate(version);
+              return Effect.tryPromise({
+                try: () =>
+                  db
+                    .update(documentVersions)
+                    .set(versionUpdate)
+                    .where(eq(documentVersions.id, version.id)),
+                catch: () =>
+                  new DocumentConstraintError({
+                    message: "Failed to update version",
+                  }),
+              });
+            } else {
+              // Insert new version
+              const versionCreate = DocumentVersionMapper.toDbCreate(version);
+              return Effect.tryPromise({
+                try: () => db.insert(documentVersions).values(versionCreate),
+                catch: () =>
+                  new DocumentConstraintError({
+                    message: "Failed to create version",
+                  }),
               });
             }
-            return new DocumentConstraintError({
-              message: "Database constraint violation",
-            });
-          },
-        });
+          });
 
-        const doc = yield* Effect.tryPromise({
+          return Effect.all(versionEffects, { concurrency: "unbounded" });
+        }),
+        // Return the saved aggregate by loading it fresh
+        Effect.flatMap(() => findById(document.id)),
+        Effect.flatMap((docOpt) =>
+          pipe(
+            docOpt,
+            Option.match({
+              onNone: () =>
+                Effect.fail(
+                  new DocumentNotFoundError({
+                    documentId: document.id,
+                    message: "Document not found after save",
+                  })
+                ),
+              onSome: (doc) => Effect.succeed(doc),
+            })
+          )
+        )
+      );
+
+    /**
+     * Find document by ID (loads full aggregate with all versions)
+     */
+    const findById: DocumentRepository["findById"] = (id) =>
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db.query.documents.findFirst({ where: eq(documents.id, id) }),
           catch: () =>
-            new DocumentNotFoundError({
-              documentId: id,
-              message: "Document was created but could not be retrieved",
+            new DocumentInfrastructureError({
+              message: "Database connection error",
             }),
-        });
+        }),
+        Effect.flatMap((docRow) => {
+          if (!docRow) {
+            return Effect.succeed(Option.none());
+          }
 
-        if (!doc) {
-          return yield* Effect.fail(
-            new DocumentNotFoundError({
-              documentId: id,
-              message: "Document not found after creation",
-            })
+          // Load all versions for this document (ordered by version number ascending)
+          return pipe(
+            Effect.tryPromise({
+              try: () =>
+                db.query.documentVersions.findMany({
+                  where: eq(documentVersions.documentId, id),
+                  orderBy: [asc(documentVersions.versionNumber)],
+                }),
+              catch: () =>
+                new DocumentInfrastructureError({
+                  message: "Database connection error",
+                }),
+            }),
+            Effect.map((versionRows) =>
+              Option.some(
+                DocumentMapper.toDomainWithVersions(docRow, versionRows)
+              )
+            )
           );
-        }
+        })
+      );
 
-        return doc as unknown as Document;
-      });
-
-    const createVersion: DocumentRepository["createVersion"] = (payload) =>
-      Effect.gen(function* () {
-        const id = payload.id || (uuid() as DocumentVersionId);
-
-        yield* Effect.tryPromise({
-          try: () =>
-            db.insert(documentVersions).values({
-              id,
-              documentId: payload.documentId,
-              filename: payload.filename,
-              originalName: payload.originalName,
-              mimeType: payload.mimeType,
-              size: payload.size,
-              path: payload.path || undefined,
-              contentRef: payload.contentRef || undefined,
-              checksum: payload.checksum || undefined,
-              versionNumber: payload.versionNumber,
-              uploadedBy: payload.uploadedBy,
-            }),
-          catch: (error) => {
-            const constraintType = detectDbConstraint(error);
-            if (constraintType === "unique") {
-              return new DocumentConstraintError({
-                message: "Version already exists for this document",
-              });
-            }
-            return new DocumentConstraintError({
-              message: "Database constraint violation",
-            });
-          },
-        });
-
-        const version = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documentVersions.findFirst({
-              where: eq(documentVersions.id, id),
-            }),
-          catch: () =>
-            new DocumentVersionNotFoundError({
-              versionId: id,
-              message: "Version was created but could not be retrieved",
-            }),
-        });
-
-        if (!version) {
-          return yield* Effect.fail(
-            new DocumentVersionNotFoundError({
-              versionId: id,
-              message: "Version not found after creation",
-            })
-          );
-        }
-
-        return version as unknown as DocumentVersion;
-      });
-
-    const findDocument: DocumentRepository["findDocument"] = (id) =>
-      Effect.gen(function* () {
-        const doc = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documents.findFirst({ where: eq(documents.id, id) }),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        return Option.fromNullable(doc as unknown as Document);
-      });
-
-    const findVersionById: DocumentRepository["findVersionById"] = (id) =>
-      Effect.gen(function* () {
-        const version = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documentVersions.findFirst({
-              where: eq(documentVersions.id, id),
-            }),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        return Option.fromNullable(version as unknown as DocumentVersion);
-      });
-
-    const findVersionByChecksum: DocumentRepository["findVersionByChecksum"] = (
-      checksum
-    ) =>
-      Effect.gen(function* () {
-        const version = yield* Effect.tryPromise({
+    /**
+     * Find document by version checksum
+     * Returns the parent document, not just the version
+     */
+    const findByChecksum: DocumentRepository["findByChecksum"] = (checksum) =>
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db.query.documentVersions.findFirst({
               where: eq(documentVersions.checksum, checksum),
             }),
           catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
+            new DocumentInfrastructureError({
+              message: "Database connection error",
+            }),
+        }),
+        Effect.flatMap((versionRow) => {
+          if (!versionRow) {
+            return Effect.succeed(Option.none());
+          }
 
-        return Option.fromNullable(version as unknown as DocumentVersion);
-      });
+          // Load the parent document with all versions
+          return findById(versionRow.documentId as DocumentId);
+        })
+      );
 
-    const findVersionByContentRef: DocumentRepository["findVersionByContentRef"] =
-      (contentRef) =>
-        Effect.gen(function* () {
-          const version = yield* Effect.tryPromise({
-            try: () =>
-              db.query.documentVersions.findFirst({
-                where: eq(documentVersions.contentRef, contentRef),
-              }),
-            catch: () =>
-              new DocumentConstraintError({ message: "Database error" }),
-          });
-
-          return Option.fromNullable(version as unknown as DocumentVersion);
-        });
-
-    const getLatestVersion: DocumentRepository["getLatestVersion"] = (
-      documentId
+    /**
+     * Find document by content reference
+     * Returns the parent document, not just the version
+     */
+    const findByContentRef: DocumentRepository["findByContentRef"] = (
+      contentRef
     ) =>
-      Effect.gen(function* () {
-        const version = yield* Effect.tryPromise({
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db.query.documentVersions.findFirst({
-              where: eq(documentVersions.documentId, documentId),
-              orderBy: [desc(documentVersions.versionNumber)],
+              where: eq(documentVersions.contentRef, contentRef),
             }),
           catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        return Option.fromNullable(version as unknown as DocumentVersion);
-      });
-
-    const listVersions: DocumentRepository["listVersions"] = (documentId) =>
-      Effect.gen(function* () {
-        const versions = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documentVersions.findMany({
-              where: eq(documentVersions.documentId, documentId),
-              orderBy: [desc(documentVersions.versionNumber)],
+            new DocumentInfrastructureError({
+              message: "Database connection error",
             }),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
+        }),
+        Effect.flatMap((versionRow) => {
+          if (!versionRow) {
+            return Effect.succeed(Option.none());
+          }
 
-        return (versions as unknown as DocumentVersion[]) || [];
-      });
+          // Load the parent document with all versions
+          return findById(versionRow.documentId as DocumentId);
+        })
+      );
 
+    /**
+     * List documents by user with pagination
+     * Returns documents with their latest version
+     */
     const listByUser: DocumentRepository["listByUser"] = (userId, pagination) =>
-      Effect.gen(function* () {
-        const { page, limit } = pagination;
-        const offset = (page - 1) * limit;
-
-        const [countResult] = yield* Effect.tryPromise({
-          try: () =>
-            db
-              .select({ count: drizzleCount() })
-              .from(documents)
-              .where(eq(documents.uploadedBy, userId)),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        const totalItems = countResult?.count || 0;
-        const totalPages = Math.ceil(totalItems / limit);
-
-        const docs = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documents.findMany({
-              where: eq(documents.uploadedBy, userId),
-              orderBy: [desc(documents.createdAt)],
-              limit,
-              offset,
+      pipe(
+        Effect.all({
+          // Get total count
+          count: pipe(
+            Effect.tryPromise({
+              try: () =>
+                db
+                  .select({ count: drizzleCount() })
+                  .from(documents)
+                  .where(eq(documents.uploadedBy, userId)),
+              catch: () =>
+                new DocumentInfrastructureError({
+                  message: "Database connection error",
+                }),
             }),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        const docsWithVersions = yield* Effect.all(
-          docs.map((doc) =>
-            Effect.gen(function* () {
-              const version = yield* Effect.tryPromise({
-                try: () =>
-                  db.query.documentVersions.findFirst({
-                    where: eq(documentVersions.documentId, doc.id),
-                    orderBy: [desc(documentVersions.versionNumber)],
-                  }),
-                catch: () =>
-                  new DocumentConstraintError({ message: "Database error" }),
+            Effect.map(([countResult]) => countResult?.count || 0)
+          ),
+          // Get paginated documents
+          docRows: Effect.tryPromise({
+            try: () => {
+              const { page, limit } = pagination;
+              const offset = (page - 1) * limit;
+              return db.query.documents.findMany({
+                where: eq(documents.uploadedBy, userId),
+                orderBy: [desc(documents.createdAt)],
+                limit,
+                offset,
               });
+            },
+            catch: () =>
+              new DocumentInfrastructureError({
+                message: "Database connection error",
+              }),
+          }),
+        }),
+        Effect.flatMap(({ count: totalItems, docRows }) => {
+          const { page, limit } = pagination;
+          const totalPages = Math.ceil(totalItems / limit);
 
-              return {
-                document: doc as unknown as Document,
-                latestVersion: version
-                  ? (version as unknown as DocumentVersion)
-                  : undefined,
-              } as DocumentWithVersion;
-            })
-          )
-        );
-
-        return {
-          data: docsWithVersions,
-          meta: {
-            page,
-            limit,
-            totalItems,
-            totalPages,
-            hasNextPage: page < totalPages,
-            hasPreviousPage: page > 1,
-          },
-        };
-      });
-
-    const listAll: DocumentRepository["listAll"] = (pagination) =>
-      Effect.gen(function* () {
-        const { page, limit } = pagination;
-        const offset = (page - 1) * limit;
-
-        const [countResult] = yield* Effect.tryPromise({
-          try: () => db.select({ count: drizzleCount() }).from(documents),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        const totalItems = countResult?.count || 0;
-        const totalPages = Math.ceil(totalItems / limit);
-
-        const docs = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documents.findMany({
-              orderBy: [desc(documents.createdAt)],
-              limit,
-              offset,
-            }),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        const docsWithVersions = yield* Effect.all(
-          docs.map((doc) =>
-            Effect.gen(function* () {
-              const version = yield* Effect.tryPromise({
-                try: () =>
-                  db.query.documentVersions.findFirst({
-                    where: eq(documentVersions.documentId, doc.id),
-                    orderBy: [desc(documentVersions.versionNumber)],
+          // For each document, get its latest version
+          return pipe(
+            Effect.all(
+              docRows.map((docRow) =>
+                pipe(
+                  Effect.tryPromise({
+                    try: () =>
+                      db.query.documentVersions.findFirst({
+                        where: eq(documentVersions.documentId, docRow.id),
+                        orderBy: [desc(documentVersions.versionNumber)],
+                      }),
+                    catch: () =>
+                      new DocumentConstraintError({
+                        message: "Database error",
+                      }),
                   }),
-                catch: () =>
-                  new DocumentConstraintError({ message: "Database error" }),
-              });
+                  Effect.map((versionRow) => {
+                    const document = DocumentMapper.toDomain(docRow);
+                    const latestVersion = versionRow
+                      ? Option.some(DocumentVersionMapper.toDomain(versionRow))
+                      : Option.none();
 
-              return {
-                document: doc as unknown as Document,
-                latestVersion: version
-                  ? (version as unknown as DocumentVersion)
-                  : undefined,
-              } as DocumentWithVersion;
-            })
-          )
-        );
-
-        return {
-          data: docsWithVersions,
-          meta: {
-            page,
-            limit,
-            totalItems,
-            totalPages,
-            hasNextPage: page < totalPages,
-            hasPreviousPage: page > 1,
-          },
-        };
-      });
-
-    const search: DocumentRepository["search"] = (query, pagination) =>
-      Effect.gen(function* () {
-        const { page, limit } = pagination;
-        const offset = (page - 1) * limit;
-        const searchPattern = `%${query}%`;
-
-        // Search in documents table, not versions - return unique documents only
-        const [countResult] = yield* Effect.tryPromise({
-          try: () =>
-            db
-              .select({ count: drizzleCount() })
-              .from(documents)
-              .where(
-                or(
-                  like(documents.filename, searchPattern),
-                  like(documents.originalName, searchPattern)
+                    return {
+                      document,
+                      latestVersion,
+                    } as DocumentWithVersion;
+                  })
                 )
-              ),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
+              )
+            ),
+            Effect.map((docsWithVersions) => ({
+              data: docsWithVersions,
+              meta: {
+                page,
+                limit,
+                totalItems,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1,
+              },
+            }))
+          );
+        })
+      );
 
-        const totalItems = countResult?.count || 0;
-        const totalPages = Math.ceil(totalItems / limit);
-
-        const docs = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documents.findMany({
-              where: or(
-                like(documents.filename, searchPattern),
-                like(documents.originalName, searchPattern)
-              ),
-              orderBy: [desc(documents.updatedAt)],
-              limit,
-              offset,
+    /**
+     * List all documents with pagination
+     */
+    const listAll: DocumentRepository["listAll"] = (pagination) =>
+      pipe(
+        Effect.all({
+          // Get total count
+          count: pipe(
+            Effect.tryPromise({
+              try: () => db.select({ count: drizzleCount() }).from(documents),
+              catch: () =>
+                new DocumentInfrastructureError({
+                  message: "Database connection error",
+                }),
             }),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
+            Effect.map(([countResult]) => countResult?.count || 0)
+          ),
+          // Get paginated documents
+          docRows: Effect.tryPromise({
+            try: () => {
+              const { page, limit } = pagination;
+              const offset = (page - 1) * limit;
+              return db.query.documents.findMany({
+                orderBy: [desc(documents.createdAt)],
+                limit,
+                offset,
+              });
+            },
+            catch: () =>
+              new DocumentInfrastructureError({
+                message: "Database connection error",
+              }),
+          }),
+        }),
+        Effect.flatMap(({ count: totalItems, docRows }) => {
+          const { page, limit } = pagination;
+          const totalPages = Math.ceil(totalItems / limit);
 
-        // Get latest version for each document to include in results
-        const docsWithVersions = yield* Effect.all(
-          docs.map((doc) =>
-            Effect.gen(function* () {
-              const latestVersionOpt = yield* getLatestVersion(
-                doc.id as DocumentId
+          // For each document, get its latest version
+          return pipe(
+            Effect.all(
+              docRows.map((docRow) =>
+                pipe(
+                  Effect.tryPromise({
+                    try: () =>
+                      db.query.documentVersions.findFirst({
+                        where: eq(documentVersions.documentId, docRow.id),
+                        orderBy: [desc(documentVersions.versionNumber)],
+                      }),
+                    catch: () =>
+                      new DocumentConstraintError({
+                        message: "Database error",
+                      }),
+                  }),
+                  Effect.map((versionRow) => {
+                    const document = DocumentMapper.toDomain(docRow);
+                    const latestVersion = versionRow
+                      ? Option.some(DocumentVersionMapper.toDomain(versionRow))
+                      : Option.none();
+
+                    return {
+                      document,
+                      latestVersion,
+                    } as DocumentWithVersion;
+                  })
+                )
+              )
+            ),
+            Effect.map((docsWithVersions) => ({
+              data: docsWithVersions,
+              meta: {
+                page,
+                limit,
+                totalItems,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPreviousPage: page > 1,
+              },
+            }))
+          );
+        })
+      );
+
+    /**
+     * Search documents by query
+     */
+    const search: DocumentRepository["search"] = (query, pagination) =>
+      pipe(
+        Effect.sync(() => {
+          const { page, limit } = pagination;
+          const offset = (page - 1) * limit;
+          const searchPattern = `%${query}%`;
+          return { page, limit, offset, searchPattern };
+        }),
+        Effect.flatMap(({ page, limit, offset, searchPattern }) =>
+          Effect.all({
+            // Get total count
+            count: pipe(
+              Effect.tryPromise({
+                try: () =>
+                  db
+                    .select({ count: drizzleCount() })
+                    .from(documents)
+                    .where(
+                      or(
+                        like(documents.filename, searchPattern),
+                        like(documents.originalName, searchPattern)
+                      )
+                    ),
+                catch: () =>
+                  new DocumentInfrastructureError({
+                    message: "Database connection error",
+                  }),
+              }),
+              Effect.map(([countResult]) => countResult?.count || 0)
+            ),
+            // Get matching documents
+            docRows: Effect.tryPromise({
+              try: () =>
+                db.query.documents.findMany({
+                  where: or(
+                    like(documents.filename, searchPattern),
+                    like(documents.originalName, searchPattern)
+                  ),
+                  orderBy: [desc(documents.updatedAt)],
+                  limit,
+                  offset,
+                }),
+              catch: () =>
+                new DocumentInfrastructureError({
+                  message: "Database connection error",
+                }),
+            }),
+          }).pipe(
+            Effect.map(({ count: totalItems, docRows }) => ({
+              totalItems,
+              totalPages: Math.ceil(totalItems / limit),
+              page,
+              limit,
+              docRows,
+            }))
+          )
+        ),
+        Effect.flatMap(({ totalItems, totalPages, page, limit, docRows }) =>
+          pipe(
+            // Load full aggregates for search results
+            Effect.all(
+              docRows.map((docRow) => findById(docRow.id as DocumentId))
+            ),
+            Effect.map((fullDocs) => {
+              // Filter out None values
+              const docs = fullDocs.flatMap((opt) =>
+                Option.isSome(opt) ? [opt.value] : []
               );
+
               return {
-                document: doc as unknown as Document,
-                latestVersion: Option.isSome(latestVersionOpt)
-                  ? latestVersionOpt.value
-                  : undefined,
+                data: docs,
+                meta: {
+                  page,
+                  limit,
+                  totalItems,
+                  totalPages,
+                  hasNextPage: page < totalPages,
+                  hasPreviousPage: page > 1,
+                },
               };
             })
           )
-        );
+        )
+      );
 
-        return {
-          data: docsWithVersions.map((dv) => dv.document),
-          meta: {
-            page,
-            limit,
-            totalItems,
-            totalPages,
-            hasNextPage: page < totalPages,
-            hasPreviousPage: page > 1,
-          },
-        };
-      });
-
-    const updateDocument: DocumentRepository["updateDocument"] = (
-      id,
-      payload
-    ) =>
-      Effect.gen(function* () {
-        const updateData: Record<string, any> = {};
-        if (payload.filename !== undefined)
-          updateData.filename = payload.filename;
-        if (payload.originalName !== undefined)
-          updateData.originalName = payload.originalName;
-        if (payload.path !== undefined) updateData.path = payload.path;
-
-        if (Object.keys(updateData).length === 0) {
-          const doc = yield* findDocument(id);
-          if (Option.isNone(doc)) {
-            return yield* Effect.fail(
+    /**
+     * Delete document (cascades to all versions)
+     */
+    const deleteDoc: DocumentRepository["delete"] = (id) =>
+      pipe(
+        Effect.tryPromise({
+          try: () => db.delete(documents).where(eq(documents.id, id)),
+          catch: () =>
+            new DocumentInfrastructureError({
+              message: "Database connection error",
+            }),
+        }),
+        Effect.flatMap((result) => {
+          if (!(result as any).changes && !(result as any).rowCount) {
+            return Effect.fail(
               new DocumentNotFoundError({
                 documentId: id,
                 message: "Document not found",
               })
             );
           }
-          return doc.value;
-        }
+          return Effect.succeed(undefined);
+        })
+      );
 
-        yield* Effect.tryPromise({
-          try: () =>
-            db.update(documents).set(updateData).where(eq(documents.id, id)),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        const updated = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documents.findFirst({ where: eq(documents.id, id) }),
-          catch: () =>
-            new DocumentNotFoundError({
-              documentId: id,
-              message: "Document not found",
-            }),
-        });
-
-        if (!updated) {
-          return yield* Effect.fail(
-            new DocumentNotFoundError({
-              documentId: id,
-              message: "Document not found",
-            })
-          );
-        }
-
-        return updated as unknown as Document;
-      });
-
-    const updateVersion: DocumentRepository["updateVersion"] = (id, payload) =>
-      Effect.gen(function* () {
-        // Prepare update object
-        const updates: any = {};
-        if (payload.path !== undefined) updates.path = payload.path;
-        if (payload.contentRef !== undefined)
-          updates.contentRef = payload.contentRef;
-        if (payload.checksum !== undefined) updates.checksum = payload.checksum;
-
-        yield* Effect.tryPromise({
-          try: () =>
-            db
-              .update(documentVersions)
-              .set(updates)
-              .where(eq(documentVersions.id, id)),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        const updated = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documentVersions.findFirst({
-              where: eq(documentVersions.id, id),
-            }),
-          catch: () =>
-            new DocumentNotFoundError({
-              documentId: "" as DocumentId, // We don't have documentId here
-              message: "Version not found",
-            }),
-        });
-
-        if (!updated) {
-          return yield* Effect.fail(
-            new DocumentNotFoundError({
-              documentId: "" as DocumentId,
-              message: "Version not found",
-            })
-          );
-        }
-
-        return updated as unknown as DocumentVersion;
-      });
-
-    const deleteDocument: DocumentRepository["deleteDocument"] = (id) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.tryPromise({
-          try: () => db.delete(documents).where(eq(documents.id, id)),
-          catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-
-        if (!(result as any).changes && !(result as any).rowCount) {
-          return yield* Effect.fail(
-            new DocumentNotFoundError({
-              documentId: id,
-              message: "Document not found",
-            })
-          );
-        }
-      });
-
-    const addAudit: DocumentRepository["addAudit"] = (payload) =>
-      Effect.gen(function* () {
-        yield* Effect.tryPromise({
+    /**
+     * Add audit log entry
+     */
+    const addAudit: DocumentRepository["addAudit"] = (
+      documentId,
+      action,
+      performedBy,
+      details
+    ) =>
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db.insert(documentAudit).values({
-              documentId: payload.documentId,
-              action: payload.action,
-              performedBy: payload.performedBy,
-              details: payload.details || "",
+              documentId,
+              action,
+              performedBy,
+              details: Option.getOrNull(details) || "",
             }),
           catch: () =>
-            new DocumentConstraintError({ message: "Database error" }),
-        });
-      });
+            new DocumentInfrastructureError({
+              message: "Database connection error",
+            }),
+        }),
+        Effect.asVoid
+      );
 
     return {
-      createDocument,
-      createVersion,
-      findDocument,
-      findVersionById,
-      findVersionByChecksum,
-      findVersionByContentRef,
-      getLatestVersion,
-      listVersions,
+      save,
+      findById,
+      findByChecksum,
+      findByContentRef,
       listByUser,
       listAll,
       search,
-      updateDocument,
-      updateVersion,
-      deleteDocument,
+      delete: deleteDoc,
       addAudit,
     } satisfies DocumentRepository;
   })

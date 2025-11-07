@@ -1,0 +1,481 @@
+/**
+ * DocumentAccessService Tests
+ *
+ * Tests for permission evaluation and access control logic
+ */
+
+import { describe, test, expect, beforeEach } from "bun:test";
+import {
+  isDocumentOwner,
+  isAdmin,
+  hasExplicitPermission,
+  getHighestPermission,
+  requireReadPermission,
+  requireWritePermission,
+  requireDeletePermission,
+} from "../../app/domain/permission/access-service";
+import { Effect } from "effect";
+import {
+  resetFactories,
+  makeTestUser,
+  makeTestAdmin,
+  makeTestDocument,
+  makeTestPermission,
+} from "../factories";
+import type { User } from "../../app/domain/user/entity";
+import type { Document } from "../../app/domain/document/entity";
+import type { DocumentPermission } from "../../app/domain/permission/entity";
+
+describe("DocumentAccessService", () => {
+  beforeEach(() => {
+    resetFactories();
+  });
+
+  describe("isAdmin", () => {
+    test("should return true for admin users", () => {
+      const admin = makeTestAdmin();
+      expect(isAdmin(admin)).toBe(true);
+    });
+
+    test("should return false for regular users", () => {
+      const user = makeTestUser({ role: "USER" });
+      expect(isAdmin(user)).toBe(false);
+    });
+  });
+
+  describe("isDocumentOwner", () => {
+    test("should return true when user is document owner", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument({ uploadedBy: user.id });
+
+      expect(isDocumentOwner(document, user)).toBe(true);
+    });
+
+    test("should return false when user is not document owner", () => {
+      const user = makeTestUser();
+      const otherUser = makeTestUser();
+      const document = makeTestDocument({ uploadedBy: otherUser.id });
+
+      expect(isDocumentOwner(document, user)).toBe(false);
+    });
+  });
+
+  describe("hasExplicitPermission", () => {
+    test("should return true when user has exact permission", () => {
+      const user = makeTestUser();
+      const permission = makeTestPermission({
+        userId: user.id,
+        permission: "READ",
+      });
+
+      expect(hasExplicitPermission([permission], user.id, "READ")).toBe(true);
+    });
+
+    test("should return true when user has higher permission (WRITE implies READ)", () => {
+      const user = makeTestUser();
+      const permission = makeTestPermission({
+        userId: user.id,
+        permission: "WRITE",
+      });
+
+      expect(hasExplicitPermission([permission], user.id, "READ")).toBe(true);
+    });
+
+    test("should return true when user has DELETE permission (highest)", () => {
+      const user = makeTestUser();
+      const permission = makeTestPermission({
+        userId: user.id,
+        permission: "DELETE",
+      });
+
+      // DELETE implies WRITE and READ
+      expect(hasExplicitPermission([permission], user.id, "READ")).toBe(true);
+      expect(hasExplicitPermission([permission], user.id, "WRITE")).toBe(true);
+      expect(hasExplicitPermission([permission], user.id, "DELETE")).toBe(true);
+    });
+
+    test("should return false when user has lower permission", () => {
+      const user = makeTestUser();
+      const permission = makeTestPermission({
+        userId: user.id,
+        permission: "READ",
+      });
+
+      expect(hasExplicitPermission([permission], user.id, "WRITE")).toBe(false);
+      expect(hasExplicitPermission([permission], user.id, "DELETE")).toBe(
+        false
+      );
+    });
+
+    test("should return false when user has no permissions", () => {
+      const user = makeTestUser();
+      const otherUser = makeTestUser();
+      const permission = makeTestPermission({
+        userId: otherUser.id,
+        permission: "READ",
+      });
+
+      expect(hasExplicitPermission([permission], user.id, "READ")).toBe(false);
+    });
+
+    test("should handle multiple permissions for same user", () => {
+      const user = makeTestUser();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({ userId: user.id, permission: "READ" }),
+        makeTestPermission({ userId: user.id, permission: "WRITE" }),
+      ];
+
+      expect(hasExplicitPermission(permissions, user.id, "WRITE")).toBe(true);
+    });
+  });
+
+  describe("evaluateDocumentAccess", () => {
+    test("should grant access to admin users (precedence level 1)", () => {
+      const admin = makeTestAdmin();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [];
+
+      expect(evaluateDocumentAccess(admin, document, permissions, "READ")).toBe(
+        true
+      );
+      expect(
+        evaluateDocumentAccess(admin, document, permissions, "WRITE")
+      ).toBe(true);
+      expect(
+        evaluateDocumentAccess(admin, document, permissions, "DELETE")
+      ).toBe(true);
+    });
+
+    test("should grant access to document owner (precedence level 2)", () => {
+      const owner = makeTestUser();
+      const document = makeTestDocument({ uploadedBy: owner.id });
+      const permissions: DocumentPermission[] = [];
+
+      expect(evaluateDocumentAccess(owner, document, permissions, "READ")).toBe(
+        true
+      );
+      expect(
+        evaluateDocumentAccess(owner, document, permissions, "WRITE")
+      ).toBe(true);
+      expect(
+        evaluateDocumentAccess(owner, document, permissions, "DELETE")
+      ).toBe(true);
+    });
+
+    test("should grant access based on explicit permission (precedence level 3)", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "READ",
+        }),
+      ];
+
+      expect(evaluateDocumentAccess(user, document, permissions, "READ")).toBe(
+        true
+      );
+    });
+
+    test("should deny access when user has no permissions (precedence level 4)", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [];
+
+      expect(evaluateDocumentAccess(user, document, permissions, "READ")).toBe(
+        false
+      );
+      expect(evaluateDocumentAccess(user, document, permissions, "WRITE")).toBe(
+        false
+      );
+      expect(
+        evaluateDocumentAccess(user, document, permissions, "DELETE")
+      ).toBe(false);
+    });
+
+    test("should respect permission hierarchy", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "READ",
+        }),
+      ];
+
+      expect(evaluateDocumentAccess(user, document, permissions, "READ")).toBe(
+        true
+      );
+      expect(evaluateDocumentAccess(user, document, permissions, "WRITE")).toBe(
+        false
+      );
+      expect(
+        evaluateDocumentAccess(user, document, permissions, "DELETE")
+      ).toBe(false);
+    });
+
+    test("should allow owner even with conflicting permissions", () => {
+      const owner = makeTestUser();
+      const document = makeTestDocument({ uploadedBy: owner.id });
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: owner.id,
+          permission: "READ", // Lower permission doesn't matter
+        }),
+      ];
+
+      // Owner always has full access
+      expect(
+        evaluateDocumentAccess(owner, document, permissions, "DELETE")
+      ).toBe(true);
+    });
+
+    test("should allow admin even without explicit permissions", () => {
+      const admin = makeTestAdmin();
+      const owner = makeTestUser();
+      const document = makeTestDocument({ uploadedBy: owner.id });
+      const permissions: DocumentPermission[] = [];
+
+      // Admin has full access to all documents
+      expect(
+        evaluateDocumentAccess(admin, document, permissions, "DELETE")
+      ).toBe(true);
+    });
+  });
+
+  describe("canRead, canWrite, canDelete helpers", () => {
+    test("canRead should evaluate READ permission", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "READ",
+        }),
+      ];
+
+      expect(canRead(user, document, permissions)).toBe(true);
+    });
+
+    test("canWrite should evaluate WRITE permission", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "WRITE",
+        }),
+      ];
+
+      expect(canWrite(user, document, permissions)).toBe(true);
+      expect(canRead(user, document, permissions)).toBe(true); // WRITE implies READ
+    });
+
+    test("canDelete should evaluate DELETE permission", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "DELETE",
+        }),
+      ];
+
+      expect(canDelete(user, document, permissions)).toBe(true);
+      expect(canWrite(user, document, permissions)).toBe(true); // DELETE implies WRITE
+      expect(canRead(user, document, permissions)).toBe(true); // DELETE implies READ
+    });
+
+    test("should deny write access when user only has READ", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "READ",
+        }),
+      ];
+
+      expect(canWrite(user, document, permissions)).toBe(false);
+      expect(canDelete(user, document, permissions)).toBe(false);
+    });
+  });
+
+  describe("getHighestPermission", () => {
+    test("should return DELETE for admin users", () => {
+      const admin = makeTestAdmin();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [];
+
+      expect(getHighestPermission(admin, document, permissions)).toBe("DELETE");
+    });
+
+    test("should return DELETE for document owner", () => {
+      const owner = makeTestUser();
+      const document = makeTestDocument({ uploadedBy: owner.id });
+      const permissions: DocumentPermission[] = [];
+
+      expect(getHighestPermission(owner, document, permissions)).toBe("DELETE");
+    });
+
+    test("should return highest explicit permission", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+
+      const readPerms: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "READ",
+        }),
+      ];
+      expect(getHighestPermission(user, document, readPerms)).toBe("READ");
+
+      const writePerms: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "WRITE",
+        }),
+      ];
+      expect(getHighestPermission(user, document, writePerms)).toBe("WRITE");
+
+      const deletePerms: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "DELETE",
+        }),
+      ];
+      expect(getHighestPermission(user, document, deletePerms)).toBe("DELETE");
+    });
+
+    test("should return null when user has no permissions", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [];
+
+      expect(getHighestPermission(user, document, permissions)).toBe(null);
+    });
+
+    test("should return highest when multiple permissions exist", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "READ",
+        }),
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "WRITE",
+        }),
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "DELETE",
+        }),
+      ];
+
+      expect(getHighestPermission(user, document, permissions)).toBe("DELETE");
+    });
+  });
+
+  describe("Edge Cases", () => {
+    test("should handle empty permissions array", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [];
+
+      expect(evaluateDocumentAccess(user, document, permissions, "READ")).toBe(
+        false
+      );
+    });
+
+    test("should handle permissions for different documents", () => {
+      const user = makeTestUser();
+      const document1 = makeTestDocument();
+      const document2 = makeTestDocument();
+      const permissionsForDoc1: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document1.id,
+          userId: user.id,
+          permission: "READ",
+        }),
+      ];
+      const permissionsForDoc2: DocumentPermission[] = [];
+
+      // User should have access to document1 only
+      expect(
+        evaluateDocumentAccess(user, document1, permissionsForDoc1, "READ")
+      ).toBe(true);
+      expect(
+        evaluateDocumentAccess(user, document2, permissionsForDoc2, "READ")
+      ).toBe(false);
+    });
+
+    test("should handle permissions for different users", () => {
+      const user1 = makeTestUser();
+      const user2 = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user1.id,
+          permission: "READ",
+        }),
+      ];
+
+      expect(evaluateDocumentAccess(user1, document, permissions, "READ")).toBe(
+        true
+      );
+      expect(evaluateDocumentAccess(user2, document, permissions, "READ")).toBe(
+        false
+      );
+    });
+
+    test("should be deterministic (pure function)", () => {
+      const user = makeTestUser();
+      const document = makeTestDocument();
+      const permissions: DocumentPermission[] = [
+        makeTestPermission({
+          documentId: document.id,
+          userId: user.id,
+          permission: "READ",
+        }),
+      ];
+
+      // Multiple calls should return same result
+      const result1 = evaluateDocumentAccess(
+        user,
+        document,
+        permissions,
+        "READ"
+      );
+      const result2 = evaluateDocumentAccess(
+        user,
+        document,
+        permissions,
+        "READ"
+      );
+      const result3 = evaluateDocumentAccess(
+        user,
+        document,
+        permissions,
+        "READ"
+      );
+
+      expect(result1).toBe(result2);
+      expect(result2).toBe(result3);
+    });
+  });
+});

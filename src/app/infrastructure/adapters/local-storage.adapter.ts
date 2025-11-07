@@ -16,6 +16,7 @@ import type {
   StoredFileInfo,
 } from "../../application/ports/storage.port";
 import { StoragePortTag } from "../../application/ports/storage.port";
+import { DocumentStorageError } from "../../domain/document/errors";
 
 const STORAGE_ROOT = process.env.STORAGE_ROOT || "./data/uploads";
 const TEMP_ROOT = process.env.TEMP_ROOT || "./data/temp";
@@ -57,7 +58,7 @@ const makeLocalStorage = (
     file: UploadedFile,
     documentId: string,
     versionId: string
-  ): Effect.Effect<StoredFileInfo, Error> =>
+  ): Effect.Effect<StoredFileInfo, DocumentStorageError> =>
     Effect.gen(function* () {
       // Extract metadata from uploaded file
       const originalName = file.name || "untitled";
@@ -68,8 +69,10 @@ const makeLocalStorage = (
       // Create temp directory
       yield* Effect.tryPromise({
         try: () => fs.mkdir(tempRoot, { recursive: true }),
-        catch: (error) =>
-          new Error(`Failed to create temp directory: ${error}`),
+        catch: () =>
+          new DocumentStorageError({
+            message: "Failed to create temporary directory for file upload",
+          }),
       });
 
       // Save to temp file
@@ -79,27 +82,38 @@ const makeLocalStorage = (
       );
       const arrayBuffer = yield* Effect.tryPromise({
         try: () => file.arrayBuffer(),
-        catch: (error) => new Error(`Failed to read file data: ${error}`),
+        catch: () =>
+          new DocumentStorageError({
+            message: "Failed to read uploaded file data",
+          }),
       });
 
       const buffer = Buffer.from(arrayBuffer);
       yield* Effect.tryPromise({
         try: () => fs.writeFile(tempPath, buffer),
-        catch: (error) => new Error(`Failed to write temp file: ${error}`),
+        catch: () =>
+          new DocumentStorageError({
+            message: "Failed to write file to temporary storage",
+          }),
       });
 
       // Move to permanent storage
       const targetDir = path.join(storageRoot, documentId, versionId);
       yield* Effect.tryPromise({
         try: () => fs.mkdir(targetDir, { recursive: true }),
-        catch: (error) =>
-          new Error(`Failed to create storage directory: ${error}`),
+        catch: () =>
+          new DocumentStorageError({
+            message: "Failed to create storage directory",
+          }),
       });
 
       const storagePath = path.join(targetDir, filename);
       yield* Effect.tryPromise({
         try: () => fs.rename(tempPath, storagePath),
-        catch: (error) => new Error(`Failed to move file to storage: ${error}`),
+        catch: () =>
+          new DocumentStorageError({
+            message: "Failed to move file to permanent storage",
+          }),
       });
 
       // Clean up temp file if it still exists (in case rename failed)
@@ -122,42 +136,54 @@ const makeLocalStorage = (
     filename: string,
     documentId: string,
     versionId: string
-  ): Effect.Effect<string, Error> =>
+  ): Effect.Effect<string, DocumentStorageError> =>
     Effect.gen(function* () {
       // Create organized directory structure: uploads/{docId}/{versionId}/
       const targetDir = path.join(storageRoot, documentId, versionId);
 
       yield* Effect.tryPromise({
         try: () => fs.mkdir(targetDir, { recursive: true }),
-        catch: (error) =>
-          new Error(`Failed to create storage directory: ${error}`),
+        catch: () =>
+          new DocumentStorageError({
+            message: "Failed to create storage directory",
+          }),
       });
 
       // Move file to permanent storage
       const storagePath = path.join(targetDir, filename);
       yield* Effect.tryPromise({
         try: () => fs.rename(tempPath, storagePath),
-        catch: (error) => new Error(`Failed to move file to storage: ${error}`),
+        catch: () =>
+          new DocumentStorageError({
+            message: "Failed to move file to permanent storage",
+          }),
       });
 
       return storagePath;
     }),
 
-  deleteFile: (storagePath: string): Effect.Effect<void, Error> =>
+  deleteFile: (
+    storagePath: string
+  ): Effect.Effect<void, DocumentStorageError> =>
     Effect.tryPromise({
       try: () => fs.unlink(storagePath),
-      catch: (error) => new Error(`Failed to delete file: ${error}`),
+      catch: () =>
+        new DocumentStorageError({
+          message: "Failed to delete file from storage",
+        }),
     }),
 
   getDownloadUrl: (
     filePath: string,
     expiresIn: number
-  ): Effect.Effect<string, Error> =>
+  ): Effect.Effect<string, DocumentStorageError> =>
     // For local storage, we just return the path
     // In production, this would generate a signed URL
     Effect.succeed(`/api/download/${encodeURIComponent(filePath)}`),
 
-  fileExists: (filePath: string): Effect.Effect<boolean, Error> =>
+  fileExists: (
+    filePath: string
+  ): Effect.Effect<boolean, DocumentStorageError> =>
     Effect.tryPromise({
       try: async () => {
         try {
@@ -167,10 +193,15 @@ const makeLocalStorage = (
           return false;
         }
       },
-      catch: (error) => new Error(`Failed to check file existence: ${error}`),
+      catch: () =>
+        new DocumentStorageError({
+          message: "Failed to check file existence",
+        }),
     }),
 
-  getFileMetadata: (filePath: string): Effect.Effect<FileMetadata, Error> =>
+  getFileMetadata: (
+    filePath: string
+  ): Effect.Effect<FileMetadata, DocumentStorageError> =>
     Effect.tryPromise({
       try: async () => {
         const stats = await fs.stat(filePath);
@@ -181,7 +212,10 @@ const makeLocalStorage = (
           etag: stats.mtimeMs.toString(),
         };
       },
-      catch: (error) => new Error(`Failed to get file metadata: ${error}`),
+      catch: () =>
+        new DocumentStorageError({
+          message: "Failed to retrieve file metadata",
+        }),
     }),
 });
 

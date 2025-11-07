@@ -3,6 +3,10 @@ import { DocumentPermission } from "./entity";
 import { User } from "../user/entity";
 import { Document } from "../document/entity";
 import { PermissionType, hasPermissionLevel } from "./value-object";
+import {
+  InsufficientPermissionError,
+  DocumentAccessDeniedError,
+} from "./errors";
 
 /**
  * DocumentAccessService - Domain Service
@@ -46,6 +50,7 @@ export const hasExplicitPermission = (
 
 /**
  * Evaluate if a user can perform a specific action on a document
+ * (Internal helper - returns boolean for composition)
  *
  * @param user - The user requesting access
  * @param document - The document being accessed
@@ -59,7 +64,7 @@ export const hasExplicitPermission = (
  * 3. Explicit permission → Check permission level
  * 4. Default → Deny access
  */
-export const evaluateDocumentAccess = (
+const evaluateAccess = (
   user: User,
   document: Document,
   permissions: readonly DocumentPermission[],
@@ -85,57 +90,84 @@ export const evaluateDocumentAccess = (
 };
 
 /**
- * Check if user can read a document
+ * Guard: Require READ permission
+ * Fails with domain error if user doesn't have permission
  */
-export const canRead = (
+export const requireReadPermission = (
   user: User,
   document: Document,
   permissions: readonly DocumentPermission[]
-): boolean => evaluateDocumentAccess(user, document, permissions, "READ");
+): Effect.Effect<void, InsufficientPermissionError> => {
+  const hasAccess = evaluateAccess(user, document, permissions, "READ");
+
+  return hasAccess
+    ? Effect.void
+    : Effect.fail(
+        new InsufficientPermissionError({
+          message: `User does not have READ permission on document`,
+          userId: user.id,
+          documentId: document.id,
+          requiredPermission: "READ",
+        })
+      );
+};
 
 /**
- * Check if user can write/update a document
+ * Guard: Require WRITE permission
+ * Fails with domain error if user doesn't have permission
  */
-export const canWrite = (
+export const requireWritePermission = (
   user: User,
   document: Document,
   permissions: readonly DocumentPermission[]
-): boolean => evaluateDocumentAccess(user, document, permissions, "WRITE");
+): Effect.Effect<void, InsufficientPermissionError> => {
+  const hasAccess = evaluateAccess(user, document, permissions, "WRITE");
+
+  return hasAccess
+    ? Effect.void
+    : Effect.fail(
+        new InsufficientPermissionError({
+          message: `User does not have WRITE permission on document`,
+          userId: user.id,
+          documentId: document.id,
+          requiredPermission: "WRITE",
+        })
+      );
+};
 
 /**
- * Check if user can delete a document
+ * Guard: Require DELETE permission
+ * Fails with domain error if user doesn't have permission
  */
-export const canDelete = (
+export const requireDeletePermission = (
   user: User,
   document: Document,
   permissions: readonly DocumentPermission[]
-): boolean => evaluateDocumentAccess(user, document, permissions, "DELETE");
+): Effect.Effect<void, InsufficientPermissionError> => {
+  const hasAccess = evaluateAccess(user, document, permissions, "DELETE");
+
+  return hasAccess
+    ? Effect.void
+    : Effect.fail(
+        new InsufficientPermissionError({
+          message: `User does not have DELETE permission on document`,
+          userId: user.id,
+          documentId: document.id,
+          requiredPermission: "DELETE",
+        })
+      );
+};
 
 /**
- * Effect-based version of access evaluation
- * Returns Effect<boolean> for composition with other Effect operations
- */
-export const evaluateDocumentAccessEffect = (
-  user: User,
-  document: Document,
-  permissions: readonly DocumentPermission[],
-  requiredPermission: PermissionType
-): Effect.Effect<boolean> =>
-  Effect.succeed(
-    evaluateDocumentAccess(user, document, permissions, requiredPermission)
-  );
-
-/**
- * Guard: Require specific permission on document
- * Fails with error if user doesn't have required permission
+ * Generic guard: Require specific permission level
  */
 export const requirePermission = (
   user: User,
   document: Document,
   permissions: readonly DocumentPermission[],
   requiredPermission: PermissionType
-): Effect.Effect<void, Error> => {
-  const hasAccess = evaluateDocumentAccess(
+): Effect.Effect<void, InsufficientPermissionError> => {
+  const hasAccess = evaluateAccess(
     user,
     document,
     permissions,
@@ -145,9 +177,41 @@ export const requirePermission = (
   return hasAccess
     ? Effect.void
     : Effect.fail(
-        new Error(
-          `User ${user.id} does not have ${requiredPermission} permission on document ${document.id}`
-        )
+        new InsufficientPermissionError({
+          message: `User does not have ${requiredPermission} permission on document`,
+          userId: user.id,
+          documentId: document.id,
+          requiredPermission,
+        })
+      );
+};
+
+/**
+ * Guard: Require access for specific action (more descriptive errors)
+ */
+export const requireDocumentAccess = (
+  user: User,
+  document: Document,
+  permissions: readonly DocumentPermission[],
+  action: string,
+  requiredPermission: PermissionType
+): Effect.Effect<void, DocumentAccessDeniedError> => {
+  const hasAccess = evaluateAccess(
+    user,
+    document,
+    permissions,
+    requiredPermission
+  );
+
+  return hasAccess
+    ? Effect.void
+    : Effect.fail(
+        new DocumentAccessDeniedError({
+          message: `User is not allowed to ${action} this document`,
+          userId: user.id,
+          documentId: document.id,
+          action,
+        })
       );
 };
 
@@ -199,7 +263,7 @@ export const filterAccessibleDocuments = <T extends { document: Document }>(
 ): readonly Document[] => {
   return documentsWithPermissions
     .filter(({ document, permissions }) =>
-      evaluateDocumentAccess(user, document, permissions, requiredPermission)
+      evaluateAccess(user, document, permissions, requiredPermission)
     )
     .map(({ document }) => document);
 };

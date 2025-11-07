@@ -188,7 +188,11 @@ export const mapErrorToStatus = (
           status: 403,
           error: "Forbidden",
           message: error.message,
-          details: { required: error.required, actual: error.actual },
+          details: {
+            userId: error.userId,
+            documentId: error.documentId,
+            requiredPermission: error.requiredPermission,
+          },
         };
       case "MetadataForbiddenError":
         return {
@@ -259,7 +263,14 @@ export const mapErrorToStatus = (
           status: 500,
           error: "Internal Server Error",
           message: error.message,
-          details: { path: error.path },
+        };
+
+      // Infrastructure Errors (500)
+      case "DocumentInfrastructureError":
+        return {
+          status: 500,
+          error: "Internal Server Error",
+          message: error.message,
         };
 
       // Schema Validation Errors (400)

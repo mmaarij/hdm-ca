@@ -1,31 +1,15 @@
-import { Schema as S } from "effect";
-import {
-  Document,
-  DocumentVersion,
-  CreateDocumentPayload,
-  CreateDocumentVersionPayload,
-  UpdateDocumentPayload,
-  DocumentWithVersion,
-} from "./entity";
-
 /**
- * Runtime validators for Document domain
+ * Document Schema
+ *
+ * This file is reserved for Effect Schema validators if needed in the future.
+ * Currently, we use TypeScript types for compile-time validation and
+ * entity factory functions for runtime construction.
+ *
+ * Domain validation happens through:
+ * - Entity factory functions (Document.create, DocumentVersion.create)
+ * - Domain guards (in guards.ts)
+ * - Value objects with branded types
  */
 
-export const validateDocument = (input: unknown) =>
-  S.decodeUnknown(Document)(input);
-
-export const validateDocumentVersion = (input: unknown) =>
-  S.decodeUnknown(DocumentVersion)(input);
-
-export const validateCreateDocumentPayload = (input: unknown) =>
-  S.decodeUnknown(CreateDocumentPayload)(input);
-
-export const validateCreateDocumentVersionPayload = (input: unknown) =>
-  S.decodeUnknown(CreateDocumentVersionPayload)(input);
-
-export const validateUpdateDocumentPayload = (input: unknown) =>
-  S.decodeUnknown(UpdateDocumentPayload)(input);
-
-export const validateDocumentWithVersion = (input: unknown) =>
-  S.decodeUnknown(DocumentWithVersion)(input);
+// Export placeholder to make this a valid module
+export {};

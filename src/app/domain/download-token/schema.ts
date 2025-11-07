@@ -1,19 +1,15 @@
-import { Schema as S } from "effect";
-import {
-  DownloadToken,
-  CreateDownloadTokenPayload,
-  DownloadTokenWithDocument,
-} from "./entity";
-
 /**
- * Runtime validators for Download Token domain
+ * Download Token Schema
+ *
+ * This file is reserved for Effect Schema validators if needed in the future.
+ * Currently, we use TypeScript types for compile-time validation and
+ * entity factory functions for runtime construction.
+ *
+ * Domain validation happens through:
+ * - Entity factory functions (DownloadToken.create, DownloadToken.markAsUsed)
+ * - Domain guards (in guards.ts)
+ * - Value objects with branded types
  */
 
-export const validateDownloadToken = (input: unknown) =>
-  S.decodeUnknown(DownloadToken)(input);
-
-export const validateCreateDownloadTokenPayload = (input: unknown) =>
-  S.decodeUnknown(CreateDownloadTokenPayload)(input);
-
-export const validateDownloadTokenWithDocument = (input: unknown) =>
-  S.decodeUnknown(DownloadTokenWithDocument)(input);
+// Export placeholder to make this a valid module
+export {};

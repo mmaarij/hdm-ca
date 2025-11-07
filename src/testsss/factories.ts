@@ -98,6 +98,7 @@ export function makeTestDocument(overrides?: Partial<Document>): Document {
     uploadedBy: userId,
     createdAt: new Date() as any,
     updatedAt: new Date() as any,
+    versions: [],
     ...overrides,
   };
 }
@@ -120,6 +121,8 @@ export function makeTestDocumentVersion(
     mimeType: "application/pdf" as any,
     size: 1024 as any,
     path: `/uploads/${id}.pdf` as any,
+    contentRef: Option.none(),
+    checksum: Option.none(),
     versionNumber: 1 as any,
     uploadedBy: userId,
     createdAt: new Date() as any,
@@ -315,8 +318,10 @@ export function makeTestDownloadToken(
   return {
     id,
     documentId: docId,
+    versionId: Option.none(),
     token: `test-token-${id}` as any,
     expiresAt: new Date(Date.now() + 3600000) as any, // 1 hour from now
+    usedAt: Option.none(),
     createdBy: userId,
     createdAt: new Date() as any,
     ...overrides,

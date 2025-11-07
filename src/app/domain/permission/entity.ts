@@ -1,7 +1,8 @@
-import { Schema as S } from "effect";
+import { Schema as S, Option } from "effect";
 import { DocumentId, UserId } from "../refined/uuid";
 import { DateTime } from "../refined/date-time";
 import { PermissionType } from "./value-object";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Permission ID Schema (using generic Uuid)
@@ -12,11 +13,60 @@ export const PermissionId = Uuid.pipe(S.brand("PermissionId"));
 export type PermissionId = S.Schema.Type<typeof PermissionId>;
 
 /**
- * Document Permission Entity
+ * Document Permission Entity - Pure Domain Model
  *
  * Represents an access control rule for a document.
  */
-export const DocumentPermission = S.Struct({
+export interface DocumentPermission {
+  readonly id: PermissionId;
+  readonly documentId: DocumentId;
+  readonly userId: UserId;
+  readonly permission: PermissionType;
+  readonly grantedBy: UserId;
+  readonly grantedAt: Date;
+}
+
+/**
+ * Factory functions for DocumentPermission entity
+ */
+export const DocumentPermission = {
+  /**
+   * Create a new permission
+   */
+  create: (props: {
+    documentId: DocumentId;
+    userId: UserId;
+    permission: PermissionType;
+    grantedBy: UserId;
+  }): DocumentPermission => ({
+    id: uuidv4() as PermissionId,
+    documentId: props.documentId,
+    userId: props.userId,
+    permission: props.permission,
+    grantedBy: props.grantedBy,
+    grantedAt: new Date(),
+  }),
+
+  /**
+   * Update permission level
+   */
+  updatePermission: (
+    permission: DocumentPermission,
+    newPermissionType: PermissionType
+  ): DocumentPermission => ({
+    ...permission,
+    permission: newPermissionType,
+  }),
+};
+
+// ============================================================================
+// Schema Definitions for Validation (kept for backward compatibility)
+// ============================================================================
+
+/**
+ * DocumentPermission Schema for validation
+ */
+export const DocumentPermissionSchema = S.Struct({
   id: PermissionId,
   documentId: DocumentId,
   userId: UserId,
@@ -24,31 +74,3 @@ export const DocumentPermission = S.Struct({
   grantedBy: UserId,
   grantedAt: S.optional(DateTime),
 });
-
-export type DocumentPermission = S.Schema.Type<typeof DocumentPermission>;
-
-/**
- * Create Permission payload
- */
-export const CreatePermissionPayload = S.Struct({
-  id: S.optional(PermissionId),
-  documentId: DocumentId,
-  userId: UserId,
-  permission: PermissionType,
-  grantedBy: UserId,
-});
-
-export type CreatePermissionPayload = S.Schema.Type<
-  typeof CreatePermissionPayload
->;
-
-/**
- * Update Permission payload
- */
-export const UpdatePermissionPayload = S.Struct({
-  permission: PermissionType,
-});
-
-export type UpdatePermissionPayload = S.Schema.Type<
-  typeof UpdatePermissionPayload
->;

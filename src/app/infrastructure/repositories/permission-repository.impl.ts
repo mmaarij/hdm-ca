@@ -1,4 +1,4 @@
-import { Effect, Option, Layer } from "effect";
+import { Effect, Option, Layer, pipe } from "effect";
 import { eq, and } from "drizzle-orm";
 import {
   PermissionRepository,
@@ -6,19 +6,16 @@ import {
 } from "../../domain/permission/repository";
 import {
   DocumentPermission,
-  CreatePermissionPayload,
-  UpdatePermissionPayload,
   PermissionId,
 } from "../../domain/permission/entity";
 import {
   PermissionNotFoundError,
   PermissionAlreadyExistsError,
   PermissionConstraintError,
-  PermissionDomainError,
 } from "../../domain/permission/errors";
 import { DrizzleService } from "../services/drizzle-service";
 import { documentPermissions } from "../models";
-import { v4 as uuid } from "uuid";
+import { PermissionMapper } from "../mappers/permission.mapper";
 import { detectDbConstraint } from "../../domain/shared/base.repository";
 import { DocumentId, UserId } from "../../domain/refined/uuid";
 import { PermissionType } from "../../domain/permission/value-object";
@@ -31,93 +28,117 @@ export const PermissionRepositoryLive = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* DrizzleService;
 
-    const create: PermissionRepository["create"] = (payload) =>
-      Effect.gen(function* () {
-        const id = payload.id || (uuid() as PermissionId);
-
-        yield* Effect.tryPromise({
-          try: () =>
-            db.insert(documentPermissions).values({
-              id,
-              documentId: payload.documentId,
-              userId: payload.userId,
-              permission: payload.permission,
-              grantedBy: payload.grantedBy,
-            }),
-          catch: (error) => {
-            const constraintType = detectDbConstraint(error);
-            if (constraintType === "unique") {
-              return new PermissionAlreadyExistsError({
-                documentId: payload.documentId,
-                userId: payload.userId,
-                message:
-                  "Permission already exists for this user on this document",
-              });
-            }
-            return new PermissionConstraintError({
-              message: "Database constraint violation",
-            });
-          },
-        });
-
-        const permission = yield* Effect.tryPromise({
+    const save: PermissionRepository["save"] = (permission) =>
+      pipe(
+        // Check if permission exists
+        Effect.tryPromise({
           try: () =>
             db.query.documentPermissions.findFirst({
-              where: eq(documentPermissions.id, id),
+              where: eq(documentPermissions.id, permission.id),
             }),
           catch: () =>
-            new PermissionNotFoundError({
-              permissionId: id,
-              message: "Permission was created but could not be retrieved",
-            }),
-        });
+            new PermissionConstraintError({ message: "Database error" }),
+        }),
+        Effect.flatMap((existingRow) => {
+          if (existingRow) {
+            // Update existing permission
+            return Effect.tryPromise({
+              try: () =>
+                db
+                  .update(documentPermissions)
+                  .set({ permission: permission.permission })
+                  .where(eq(documentPermissions.id, permission.id)),
+              catch: () =>
+                new PermissionConstraintError({
+                  message: "Database constraint violation",
+                }),
+            });
+          } else {
+            // Create new permission
+            const createData = PermissionMapper.toDbCreate(permission);
 
-        if (!permission) {
-          return yield* Effect.fail(
-            new PermissionNotFoundError({
-              permissionId: id,
-              message: "Permission not found after creation",
-            })
-          );
-        }
-
-        return permission as unknown as DocumentPermission;
-      });
+            return Effect.tryPromise({
+              try: () => db.insert(documentPermissions).values(createData),
+              catch: (error) => {
+                const constraintType = detectDbConstraint(error);
+                if (constraintType === "unique") {
+                  return new PermissionAlreadyExistsError({
+                    documentId: permission.documentId,
+                    userId: permission.userId,
+                    message:
+                      "Permission already exists for this user on this document",
+                  });
+                }
+                return new PermissionConstraintError({
+                  message: "Database constraint violation",
+                });
+              },
+            });
+          }
+        }),
+        // Fetch the saved permission
+        Effect.flatMap(() =>
+          Effect.tryPromise({
+            try: () =>
+              db.query.documentPermissions.findFirst({
+                where: eq(documentPermissions.id, permission.id),
+              }),
+            catch: () =>
+              new PermissionNotFoundError({
+                permissionId: permission.id,
+                message: "Permission not found after save",
+              }),
+          })
+        ),
+        Effect.flatMap((savedRow) =>
+          savedRow
+            ? Effect.succeed(PermissionMapper.toDomain(savedRow))
+            : Effect.fail(
+                new PermissionNotFoundError({
+                  permissionId: permission.id,
+                  message: "Permission not found after save",
+                })
+              )
+        )
+      );
 
     const findById: PermissionRepository["findById"] = (id) =>
-      Effect.gen(function* () {
-        const permission = yield* Effect.tryPromise({
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db.query.documentPermissions.findFirst({
               where: eq(documentPermissions.id, id),
             }),
           catch: () =>
             new PermissionConstraintError({ message: "Database error" }),
-        });
-
-        return Option.fromNullable(permission as unknown as DocumentPermission);
-      });
+        }),
+        Effect.map((permissionRow) =>
+          pipe(
+            Option.fromNullable(permissionRow),
+            Option.map(PermissionMapper.toDomain)
+          )
+        )
+      );
 
     const findByDocument: PermissionRepository["findByDocument"] = (
       documentId
     ) =>
-      Effect.gen(function* () {
-        const permissions = yield* Effect.tryPromise({
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db.query.documentPermissions.findMany({
               where: eq(documentPermissions.documentId, documentId),
             }),
           catch: () =>
             new PermissionConstraintError({ message: "Database error" }),
-        });
-
-        return permissions as unknown as readonly DocumentPermission[];
-      });
+        }),
+        Effect.map(PermissionMapper.toDomainMany)
+      );
 
     const findByUserAndDocument: PermissionRepository["findByUserAndDocument"] =
       (userId, documentId) =>
-        Effect.gen(function* () {
-          const permissions = yield* Effect.tryPromise({
+        pipe(
+          Effect.tryPromise({
             try: () =>
               db.query.documentPermissions.findMany({
                 where: and(
@@ -127,92 +148,53 @@ export const PermissionRepositoryLive = Layer.effect(
               }),
             catch: () =>
               new PermissionConstraintError({ message: "Database error" }),
-          });
-
-          return permissions as unknown as readonly DocumentPermission[];
-        });
+          }),
+          Effect.map(PermissionMapper.toDomainMany)
+        );
 
     const findByUser: PermissionRepository["findByUser"] = (userId) =>
-      Effect.gen(function* () {
-        const permissions = yield* Effect.tryPromise({
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db.query.documentPermissions.findMany({
               where: eq(documentPermissions.userId, userId),
             }),
           catch: () =>
             new PermissionConstraintError({ message: "Database error" }),
-        });
-
-        return permissions as unknown as readonly DocumentPermission[];
-      });
-
-    const update: PermissionRepository["update"] = (id, payload) =>
-      Effect.gen(function* () {
-        yield* Effect.tryPromise({
-          try: () =>
-            db
-              .update(documentPermissions)
-              .set({ permission: payload.permission })
-              .where(eq(documentPermissions.id, id)),
-          catch: (error) => {
-            return new PermissionConstraintError({
-              message: "Database constraint violation",
-            });
-          },
-        });
-
-        const updated = yield* Effect.tryPromise({
-          try: () =>
-            db.query.documentPermissions.findFirst({
-              where: eq(documentPermissions.id, id),
-            }),
-          catch: () =>
-            new PermissionNotFoundError({
-              permissionId: id,
-              message: "Permission not found",
-            }),
-        });
-
-        if (!updated) {
-          return yield* Effect.fail(
-            new PermissionNotFoundError({
-              permissionId: id,
-              message: "Permission not found",
-            })
-          );
-        }
-
-        return updated as unknown as DocumentPermission;
-      });
+        }),
+        Effect.map(PermissionMapper.toDomainMany)
+      );
 
     const deletePermission: PermissionRepository["delete"] = (id) =>
-      Effect.gen(function* () {
-        const result = yield* Effect.tryPromise({
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db
               .delete(documentPermissions)
               .where(eq(documentPermissions.id, id)),
           catch: () =>
             new PermissionConstraintError({ message: "Database error" }),
-        });
-
-        if (!(result as any).changes && !(result as any).rowCount) {
-          return yield* Effect.fail(
-            new PermissionNotFoundError({
-              permissionId: id,
-              message: "Permission not found",
-            })
-          );
-        }
-      });
+        }),
+        Effect.flatMap((result) => {
+          if (!(result as any).changes && !(result as any).rowCount) {
+            return Effect.fail(
+              new PermissionNotFoundError({
+                permissionId: id,
+                message: "Permission not found",
+              })
+            );
+          }
+          return Effect.succeed(undefined);
+        })
+      );
 
     const hasPermission: PermissionRepository["hasPermission"] = (
       userId,
       documentId,
       permission
     ) =>
-      Effect.gen(function* () {
-        const permissions = yield* Effect.tryPromise({
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db.query.documentPermissions.findMany({
               where: and(
@@ -223,32 +205,31 @@ export const PermissionRepositoryLive = Layer.effect(
             }),
           catch: () =>
             new PermissionConstraintError({ message: "Database error" }),
-        });
-
-        return permissions.length > 0;
-      });
+        }),
+        Effect.map((permissionRows) => permissionRows.length > 0)
+      );
 
     const deleteByDocument: PermissionRepository["deleteByDocument"] = (
       documentId
     ) =>
-      Effect.gen(function* () {
-        yield* Effect.tryPromise({
+      pipe(
+        Effect.tryPromise({
           try: () =>
             db
               .delete(documentPermissions)
               .where(eq(documentPermissions.documentId, documentId)),
           catch: () =>
             new PermissionConstraintError({ message: "Database error" }),
-        });
-      });
+        }),
+        Effect.asVoid
+      );
 
     return {
-      create,
+      save,
       findById,
       findByDocument,
       findByUserAndDocument,
       findByUser,
-      update,
       delete: deletePermission,
       hasPermission,
       deleteByDocument,

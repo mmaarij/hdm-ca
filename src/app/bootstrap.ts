@@ -21,16 +21,12 @@ import { PermissionRepositoryLive } from "./infrastructure/repositories/permissi
 import { MetadataRepositoryLive } from "./infrastructure/repositories/metadata-repository.impl";
 import { DownloadTokenRepositoryLive } from "./infrastructure/repositories/download-token-repository.impl";
 
-// Domain - Services
-import { DocumentServiceLive } from "./domain/document/service";
-
 // Application - Workflows
 import { UserWorkflowLive } from "./application/workflows/user-workflow";
 import { DocumentWorkflowLive } from "./application/workflows/document-workflow";
 import { PermissionWorkflowLive } from "./application/workflows/permission-workflow";
 import { MetadataWorkflowLive } from "./application/workflows/metadata-workflow";
 import { DownloadTokenWorkflowLive } from "./application/workflows/download-token-workflow";
-import { DocumentVersionWorkflowLive } from "./application/workflows/document-version-workflow";
 
 /**
  * Application Layer
@@ -58,30 +54,22 @@ const RepositoryLayer = Layer.provide(
   BaseLayer
 );
 
-// Layer 3: Domain Services (depend on Repositories)
-const DomainServiceLayer = Layer.provide(
-  DocumentServiceLive,
-  Layer.merge(BaseLayer, RepositoryLayer)
-);
-
-// Layer 4: Application Workflows (depend on Repositories, Services, and Adapters)
+// Layer 3: Application Workflows (depend on Repositories and Adapters)
 const WorkflowLayer = Layer.provide(
   Layer.mergeAll(
     UserWorkflowLive,
     DocumentWorkflowLive,
     PermissionWorkflowLive,
     MetadataWorkflowLive,
-    DownloadTokenWorkflowLive,
-    DocumentVersionWorkflowLive
+    DownloadTokenWorkflowLive
   ),
-  Layer.mergeAll(BaseLayer, RepositoryLayer, DomainServiceLayer)
+  Layer.mergeAll(BaseLayer, RepositoryLayer)
 );
 
 // Final composed layer
 export const AppLayer = Layer.mergeAll(
   BaseLayer,
   RepositoryLayer,
-  DomainServiceLayer,
   WorkflowLayer
 );
 

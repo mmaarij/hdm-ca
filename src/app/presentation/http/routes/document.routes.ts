@@ -6,7 +6,7 @@
  */
 
 import { Elysia, t } from "elysia";
-import { Effect } from "effect";
+import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { DocumentWorkflowTag } from "../../../application/workflows/document-workflow";
 import * as DocumentDTOs from "../../../application/dtos/document";
@@ -30,36 +30,35 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
       .post(
         "/",
         async ({ headers, body }) => {
-          const effect = Effect.gen(function* () {
-            const documentWorkflow = yield* DocumentWorkflowTag;
-            const auth = yield* requireAuth();
+          const effect = pipe(
+            DocumentWorkflowTag,
+            Effect.flatMap((documentWorkflow) =>
+              pipe(
+                requireAuth(),
+                Effect.flatMap((auth) => {
+                  const formData = body as any;
+                  const file = formData.file;
 
-            // Extract file and documentId from form data
-            const formData = body as any;
-            const file = formData.file;
+                  if (!file) {
+                    return Effect.fail(new Error("File is required"));
+                  }
 
-            if (!file) {
-              return yield* Effect.fail(new Error("File is required"));
-            }
+                  const command = {
+                    documentId: formData.documentId || undefined,
+                    file: file,
+                    uploadedBy: auth.userId,
+                  };
 
-            // Build command - storage layer handles all file operations
-            const command = {
-              documentId: formData.documentId || undefined,
-              file: file, // Pass raw file to workflow/storage layer
-              uploadedBy: auth.userId,
-            };
-
-            const validatedCommand = yield* validateBody(
-              DocumentDTOs.UploadDocumentCommand,
-              command
-            );
-
-            const result = yield* documentWorkflow.uploadDocument(
-              validatedCommand
-            );
-
-            return result;
-          });
+                  return pipe(
+                    validateBody(DocumentDTOs.UploadDocumentCommand, command),
+                    Effect.flatMap((validatedCommand) =>
+                      documentWorkflow.uploadDocument(validatedCommand)
+                    )
+                  );
+                })
+              )
+            )
+          );
 
           return runEffect(
             withAuth(effect, headers.authorization) as any,
@@ -79,15 +78,20 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Get document by ID (returns latest version)
        */
       .get("/:documentId", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const result = yield* documentWorkflow.getDocument({
-            documentId: params.documentId as any,
-            userId: auth.userId as any,
-          });
-          return result;
-        });
+        const effect = pipe(
+          DocumentWorkflowTag,
+          Effect.flatMap((documentWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                documentWorkflow.getDocument({
+                  documentId: params.documentId as any,
+                  userId: auth.userId as any,
+                })
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -100,16 +104,21 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Get specific version of a document
        */
       .get("/:documentId/versions/:versionId", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const result = yield* documentWorkflow.getDocumentVersion({
-            documentId: params.documentId as any,
-            versionId: params.versionId as any,
-            userId: auth.userId as any,
-          });
-          return result;
-        });
+        const effect = pipe(
+          DocumentWorkflowTag,
+          Effect.flatMap((documentWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                documentWorkflow.getDocumentVersion({
+                  documentId: params.documentId as any,
+                  versionId: params.versionId as any,
+                  userId: auth.userId as any,
+                })
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -122,15 +131,20 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * List all versions of a document
        */
       .get("/:documentId/versions", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const result = yield* documentWorkflow.listDocumentVersions(
-            params.documentId as any,
-            auth.userId as any
-          );
-          return result;
-        });
+        const effect = pipe(
+          DocumentWorkflowTag,
+          Effect.flatMap((documentWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                documentWorkflow.listDocumentVersions(
+                  params.documentId as any,
+                  auth.userId as any
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -143,19 +157,25 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * List documents accessible to current user
        */
       .get("/", async ({ headers, query }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const queryParams = yield* validateQuery(
-            DocumentDTOs.ListDocumentsQuery,
-            {
-              ...query,
-              userId: auth.userId,
-            }
-          );
-          const result = yield* documentWorkflow.listDocuments(queryParams);
-          return result;
-        });
+        const effect = pipe(
+          DocumentWorkflowTag,
+          Effect.flatMap((documentWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                pipe(
+                  validateQuery(DocumentDTOs.ListDocumentsQuery, {
+                    ...query,
+                    userId: auth.userId,
+                  }),
+                  Effect.flatMap((queryParams) =>
+                    documentWorkflow.listDocuments(queryParams)
+                  )
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -168,19 +188,25 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * List all documents (admin only)
        */
       .get("/admin/all", async ({ headers, query }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const queryParams = yield* validateQuery(
-            DocumentDTOs.ListAllDocumentsQuery,
-            query
-          );
-          const result = yield* documentWorkflow.listAllDocuments(
-            queryParams,
-            auth.userId as any
-          );
-          return result;
-        });
+        const effect = pipe(
+          DocumentWorkflowTag,
+          Effect.flatMap((documentWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                pipe(
+                  validateQuery(DocumentDTOs.ListAllDocumentsQuery, query),
+                  Effect.flatMap((queryParams) =>
+                    documentWorkflow.listAllDocuments(
+                      queryParams,
+                      auth.userId as any
+                    )
+                  )
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -193,19 +219,25 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Search documents
        */
       .get("/search", async ({ headers, query }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          const queryParams = yield* validateQuery(
-            DocumentDTOs.SearchDocumentsQuery,
-            {
-              ...query,
-              userId: auth.userId,
-            }
-          );
-          const result = yield* documentWorkflow.searchDocuments(queryParams);
-          return result;
-        });
+        const effect = pipe(
+          DocumentWorkflowTag,
+          Effect.flatMap((documentWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                pipe(
+                  validateQuery(DocumentDTOs.SearchDocumentsQuery, {
+                    ...query,
+                    userId: auth.userId,
+                  }),
+                  Effect.flatMap((queryParams) =>
+                    documentWorkflow.searchDocuments(queryParams)
+                  )
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -218,15 +250,21 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Delete document and all its versions
        */
       .delete("/:documentId", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const documentWorkflow = yield* DocumentWorkflowTag;
-          const auth = yield* requireAuth();
-          yield* documentWorkflow.deleteDocument({
-            documentId: params.documentId as any,
-            userId: auth.userId as any,
-          });
-          return { message: "Document deleted successfully" };
-        });
+        const effect = pipe(
+          DocumentWorkflowTag,
+          Effect.flatMap((documentWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                documentWorkflow.deleteDocument({
+                  documentId: params.documentId as any,
+                  userId: auth.userId as any,
+                })
+              ),
+              Effect.map(() => ({ message: "Document deleted successfully" }))
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,

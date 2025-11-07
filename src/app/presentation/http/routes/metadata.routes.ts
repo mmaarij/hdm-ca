@@ -5,7 +5,7 @@
  */
 
 import { Elysia } from "elysia";
-import { Effect } from "effect";
+import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { MetadataWorkflowTag } from "../../../application/workflows/metadata-workflow";
 import * as MetadataDTOs from "../../../application/dtos/metedata";
@@ -24,16 +24,25 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Add metadata to a document
        */
       .post("/", async ({ headers, body }) => {
-        const effect = Effect.gen(function* () {
-          const metadataWorkflow = yield* MetadataWorkflowTag;
-          const auth = yield* requireAuth();
-          const command = yield* validateBody(MetadataDTOs.AddMetadataCommand, {
-            ...(body as any),
-            userId: auth.userId,
-          });
-          const result = yield* metadataWorkflow.addMetadata(command);
-          return result;
-        });
+        const effect = pipe(
+          MetadataWorkflowTag,
+          Effect.flatMap((metadataWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                pipe(
+                  validateBody(MetadataDTOs.AddMetadataCommand, {
+                    ...(body as any),
+                    userId: auth.userId,
+                  }),
+                  Effect.flatMap((command) =>
+                    metadataWorkflow.addMetadata(command)
+                  )
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -46,20 +55,26 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Update metadata
        */
       .put("/:metadataId", async ({ headers, params, body }) => {
-        const effect = Effect.gen(function* () {
-          const metadataWorkflow = yield* MetadataWorkflowTag;
-          const auth = yield* requireAuth();
-          const command = yield* validateBody(
-            MetadataDTOs.UpdateMetadataCommand,
-            {
-              metadataId: params.metadataId,
-              userId: auth.userId,
-              ...(body as any),
-            }
-          );
-          const result = yield* metadataWorkflow.updateMetadata(command);
-          return result;
-        });
+        const effect = pipe(
+          MetadataWorkflowTag,
+          Effect.flatMap((metadataWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                pipe(
+                  validateBody(MetadataDTOs.UpdateMetadataCommand, {
+                    metadataId: params.metadataId,
+                    userId: auth.userId,
+                    ...(body as any),
+                  }),
+                  Effect.flatMap((command) =>
+                    metadataWorkflow.updateMetadata(command)
+                  )
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -72,15 +87,21 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Delete metadata
        */
       .delete("/:metadataId", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const metadataWorkflow = yield* MetadataWorkflowTag;
-          const auth = yield* requireAuth();
-          yield* metadataWorkflow.deleteMetadata({
-            metadataId: params.metadataId as any,
-            userId: auth.userId as any,
-          });
-          return { message: "Metadata deleted successfully" };
-        });
+        const effect = pipe(
+          MetadataWorkflowTag,
+          Effect.flatMap((metadataWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                metadataWorkflow.deleteMetadata({
+                  metadataId: params.metadataId as any,
+                  userId: auth.userId as any,
+                })
+              ),
+              Effect.map(() => ({ message: "Metadata deleted successfully" }))
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -93,15 +114,20 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * List all metadata for a document
        */
       .get("/document/:documentId", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const metadataWorkflow = yield* MetadataWorkflowTag;
-          const auth = yield* requireAuth();
-          const result = yield* metadataWorkflow.listMetadata({
-            documentId: params.documentId as any,
-            userId: auth.userId as any,
-          });
-          return result;
-        });
+        const effect = pipe(
+          MetadataWorkflowTag,
+          Effect.flatMap((metadataWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                metadataWorkflow.listMetadata({
+                  documentId: params.documentId as any,
+                  userId: auth.userId as any,
+                })
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -114,16 +140,21 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Get metadata by key
        */
       .get("/document/:documentId/key/:key", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const metadataWorkflow = yield* MetadataWorkflowTag;
-          const auth = yield* requireAuth();
-          const result = yield* metadataWorkflow.getMetadataByKey({
-            documentId: params.documentId as any,
-            key: params.key as any,
-            userId: auth.userId as any,
-          });
-          return result;
-        });
+        const effect = pipe(
+          MetadataWorkflowTag,
+          Effect.flatMap((metadataWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                metadataWorkflow.getMetadataByKey({
+                  documentId: params.documentId as any,
+                  key: params.key as any,
+                  userId: auth.userId as any,
+                })
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,

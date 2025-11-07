@@ -5,8 +5,9 @@
  * Pure application logic - no HTTP, DB, or storage concerns.
  */
 
-import { Effect, Option, Context, Layer } from "effect";
+import { Effect, Option, Context, Layer, pipe } from "effect";
 import { UserRepositoryTag } from "../../domain/user/repository";
+import { User } from "../../domain/user/entity";
 import {
   UserNotFoundError,
   UserAlreadyExistsError,
@@ -20,7 +21,9 @@ import {
   PasswordHasherPortTag,
 } from "../ports/password-hasher.port";
 import { JwtPort, JwtPortTag } from "../ports/jwt.port";
-import { makePassword } from "../../domain/refined/password";
+import { makePassword, HashedPassword } from "../../domain/refined/password";
+import { EmailAddress } from "../../domain/refined/email";
+import { UserRole } from "../../domain/user/value-object";
 import type {
   RegisterUserCommand,
   LoginUserCommand,
@@ -36,6 +39,8 @@ import type {
   ListUsersResponse,
 } from "../dtos/user/response.dto";
 import { UserId } from "../../domain/refined/uuid";
+import { loadEntity } from "../utils/effect-helpers";
+import { UserResponseMapper, UserCommandMapper } from "../mappers/user.mapper";
 
 /**
  * User Workflow Interface
@@ -104,34 +109,39 @@ export const UserWorkflowLive = Layer.effect(
         "RegisterUser",
         withUseCaseLogging(
           "RegisterUser",
-          Effect.gen(function* () {
+          pipe(
             // Check if user already exists
-            const existingUser = yield* userRepo.findByEmail(command.email);
-            if (Option.isSome(existingUser)) {
-              return yield* Effect.fail(
-                new UserAlreadyExistsError({
-                  email: command.email,
-                  message: `User with email ${command.email} already exists`,
-                })
-              );
-            }
-
+            userRepo.findByEmail(command.email),
+            Effect.flatMap(
+              Option.match({
+                onNone: () => Effect.succeed(undefined),
+                onSome: () =>
+                  Effect.fail(
+                    new UserAlreadyExistsError({
+                      email: command.email,
+                      message: `User with email ${command.email} already exists`,
+                    })
+                  ),
+              })
+            ),
             // Hash password
-            const password = yield* makePassword(command.password);
-            const hashedPassword = yield* passwordHasher.hash(password);
-
-            // Create user
-            const user = yield* userRepo.create({
-              email: command.email,
-              password: hashedPassword,
-              role: command.role,
-            });
-
-            const { password: _, ...userResponse } = user;
-            return {
-              user: userResponse,
-            };
-          }),
+            Effect.flatMap(() => makePassword(command.password)),
+            Effect.flatMap((password) => passwordHasher.hash(password)),
+            // Create and save user
+            Effect.flatMap((hashedPassword) => {
+              const newUser = User.create({
+                email: command.email,
+                password: hashedPassword as HashedPassword,
+                role: command.role,
+              });
+              return userRepo.save(newUser);
+            }),
+            // Map to response
+            Effect.mapError((e) =>
+              e instanceof Error ? e : new Error(String(e))
+            ),
+            Effect.map((user) => UserResponseMapper.toRegisterResponse(user))
+          ),
           { email: command.email }
         )
       );
@@ -141,48 +151,61 @@ export const UserWorkflowLive = Layer.effect(
         "LoginUser",
         withUseCaseLogging(
           "LoginUser",
-          Effect.gen(function* () {
+          pipe(
             // Find user by email
-            const userOpt = yield* userRepo.findByEmail(command.email);
-            if (Option.isNone(userOpt)) {
-              return yield* Effect.fail(
-                new InvalidCredentialsError({
-                  message: "Invalid email or password",
-                })
-              );
-            }
-
-            const user = userOpt.value;
-
+            userRepo.findByEmail(command.email),
+            Effect.flatMap(
+              Option.match({
+                onNone: () =>
+                  Effect.fail(
+                    new InvalidCredentialsError({
+                      message: "Invalid email or password",
+                    })
+                  ),
+                onSome: (user: User) => Effect.succeed(user),
+              })
+            ),
             // Verify password
-            const password = yield* makePassword(command.password);
-            const isValidPassword = yield* passwordHasher.verify(
-              password,
-              user.password
-            );
-
-            if (!isValidPassword) {
-              return yield* Effect.fail(
-                new InvalidCredentialsError({
-                  message: "Invalid email or password",
-                })
-              );
-            }
-
+            Effect.flatMap((user) =>
+              pipe(
+                makePassword(command.password),
+                Effect.flatMap((password) =>
+                  passwordHasher.verify(password, user.password)
+                ),
+                Effect.flatMap((isValid) =>
+                  isValid
+                    ? Effect.succeed(user)
+                    : Effect.fail(
+                        new InvalidCredentialsError({
+                          message: "Invalid email or password",
+                        })
+                      )
+                )
+              )
+            ),
             // Generate JWT token
-            const { token, expiresIn } = yield* jwtService.sign({
-              userId: user.id,
-              email: user.email,
-              role: user.role,
-            });
-
-            const { password: _, ...userResponse } = user;
-            return {
-              user: userResponse,
-              token,
-              expiresIn,
-            };
-          }),
+            Effect.flatMap((user) =>
+              pipe(
+                jwtService.sign({
+                  userId: user.id,
+                  email: user.email,
+                  role: user.role,
+                }),
+                Effect.map(({ token, expiresIn }) => ({
+                  user,
+                  token,
+                  expiresIn,
+                }))
+              )
+            ),
+            // Map to response
+            Effect.mapError((e) =>
+              e instanceof Error ? e : new Error(String(e))
+            ),
+            Effect.map(({ user, token, expiresIn }) =>
+              UserResponseMapper.toLoginResponse(user, token, expiresIn)
+            )
+          ),
           { email: command.email }
         )
       );
@@ -190,21 +213,18 @@ export const UserWorkflowLive = Layer.effect(
     const getUserProfile: UserWorkflow["getUserProfile"] = (query) =>
       withUseCaseLogging(
         "GetUserProfile",
-        Effect.gen(function* () {
-          const userOpt = yield* userRepo.findById(query.userId);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "User",
-                id: query.userId,
-                message: `User with ID ${query.userId} not found`,
-              })
-            );
-          }
-
-          const { password: _, ...userResponse } = userOpt.value;
-          return userResponse;
-        }),
+        pipe(
+          // Load user
+          loadEntity(userRepo.findById(query.userId), "User", query.userId),
+          Effect.mapError((e) =>
+            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
+          ),
+          // Map to response (exclude password)
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map((user) => UserResponseMapper.toUserProfileResponse(user))
+        ),
         { userId: query.userId }
       );
 
@@ -214,50 +234,68 @@ export const UserWorkflowLive = Layer.effect(
     ) =>
       withUseCaseLogging(
         "UpdateUserProfile",
-        Effect.gen(function* () {
-          // Check if user exists
-          const userOpt = yield* userRepo.findById(userId);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "User",
-                id: userId,
-                message: `User with ID ${userId} not found`,
-              })
-            );
-          }
-
-          // Prepare update payload
-          const updatePayload: any = {};
-
-          if (command.email) {
-            // Check if new email already exists
-            const existingUser = yield* userRepo.findByEmail(command.email);
-            if (
-              Option.isSome(existingUser) &&
-              existingUser.value.id !== userId
-            ) {
-              return yield* Effect.fail(
-                new UserAlreadyExistsError({
-                  email: command.email,
-                  message: `User with email ${command.email} already exists`,
+        pipe(
+          // Load existing user
+          loadEntity(userRepo.findById(userId), "User", userId),
+          Effect.mapError((e) =>
+            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
+          ),
+          // Check email uniqueness if updating email
+          Effect.flatMap((user) =>
+            command.email
+              ? pipe(
+                  userRepo.findByEmail(command.email),
+                  Effect.flatMap(
+                    Option.match({
+                      onNone: () => Effect.succeed(user),
+                      onSome: (existingUser: User) =>
+                        existingUser.id !== userId
+                          ? Effect.fail(
+                              new UserAlreadyExistsError({
+                                email: command.email!,
+                                message: `User with email ${command.email} already exists`,
+                              })
+                            )
+                          : Effect.succeed(user),
+                    })
+                  )
+                )
+              : Effect.succeed(user)
+          ),
+          // Hash password if updating
+          Effect.flatMap((user) =>
+            command.password
+              ? pipe(
+                  makePassword(command.password),
+                  Effect.flatMap((password) => passwordHasher.hash(password)),
+                  Effect.map((hashedPassword) => ({
+                    user,
+                    updates: {
+                      email: command.email,
+                      password: hashedPassword as HashedPassword,
+                    },
+                  }))
+                )
+              : Effect.succeed({
+                  user,
+                  updates: {
+                    email: command.email,
+                  },
                 })
-              );
-            }
-            updatePayload.email = command.email;
-          }
-
-          if (command.password) {
-            const password = yield* makePassword(command.password);
-            updatePayload.password = yield* passwordHasher.hash(password);
-          }
-
-          // Update user
-          const updatedUser = yield* userRepo.update(userId, updatePayload);
-
-          const { password: _, ...userResponse } = updatedUser;
-          return userResponse;
-        }),
+          ),
+          // Update and save user
+          Effect.flatMap(({ user, updates }) => {
+            const updatedUser = User.update(user, updates);
+            return userRepo.save(updatedUser);
+          }),
+          // Map to response
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map((savedUser) =>
+            UserResponseMapper.toUserResponse(savedUser)
+          )
+        ),
         { userId }
       );
 
@@ -266,48 +304,46 @@ export const UserWorkflowLive = Layer.effect(
         "ListUsers",
         withUseCaseLogging(
           "ListUsers",
-          Effect.gen(function* () {
+          pipe(
             // Verify requesting user is admin
-            const requestingUserOpt = yield* userRepo.findById(query.userId);
-            if (Option.isNone(requestingUserOpt)) {
-              return yield* Effect.fail(
-                new NotFoundError({
-                  entityType: "User",
-                  id: query.userId,
-                  message: `User with ID ${query.userId} not found`,
-                })
+            loadEntity(userRepo.findById(query.userId), "User", query.userId),
+            Effect.mapError((e) =>
+              "_tag" in e && e._tag === "NotFoundError"
+                ? new NotFoundError(e)
+                : e
+            ),
+            Effect.flatMap((requestingUser) =>
+              requestingUser.role === "ADMIN"
+                ? Effect.succeed(requestingUser)
+                : Effect.fail(
+                    new ForbiddenError({
+                      message: "Only administrators can list all users",
+                      resource: "Users",
+                    })
+                  )
+            ),
+            // Get all users
+            Effect.flatMap(() => userRepo.listAll()),
+            // Apply pagination
+            Effect.map((users) => {
+              const page = query.page ?? 1;
+              const limit = query.limit ?? 10;
+              const startIndex = (page - 1) * limit;
+              const endIndex = startIndex + limit;
+              const paginatedUsers = users.slice(startIndex, endIndex);
+
+              return UserResponseMapper.toListUsersResponse(
+                paginatedUsers,
+                users.length,
+                page,
+                limit
               );
-            }
-
-            const requestingUser = requestingUserOpt.value;
-            if (requestingUser.role !== "ADMIN") {
-              return yield* Effect.fail(
-                new ForbiddenError({
-                  message: "Only administrators can list all users",
-                  resource: "Users",
-                })
-              );
-            }
-
-            const users = yield* userRepo.listAll();
-
-            // Simple pagination (in-memory)
-            const page = query.page ?? 1;
-            const limit = query.limit ?? 10;
-            const startIndex = (page - 1) * limit;
-            const endIndex = startIndex + limit;
-
-            const paginatedUsers = users.slice(startIndex, endIndex);
-            const totalPages = Math.ceil(users.length / limit);
-
-            return {
-              users: paginatedUsers.map(({ password: _, ...user }) => user),
-              total: users.length,
-              page,
-              limit,
-              totalPages,
-            };
-          })
+            }),
+            // Map errors
+            Effect.mapError((e) =>
+              e instanceof Error ? e : new Error(String(e))
+            )
+          )
         )
       );
 
@@ -317,48 +353,47 @@ export const UserWorkflowLive = Layer.effect(
     ) =>
       withUseCaseLogging(
         "DeleteUser",
-        Effect.gen(function* () {
-          // Check if user exists
-          const userOpt = yield* userRepo.findById(command.userId);
-          if (Option.isNone(userOpt)) {
-            return yield* Effect.fail(
-              new NotFoundError({
-                entityType: "User",
-                id: command.userId,
-                message: `User with ID ${command.userId} not found`,
-              })
-            );
-          }
+        pipe(
+          // Load both users in parallel
+          Effect.all({
+            user: loadEntity(
+              userRepo.findById(command.userId),
+              "User",
+              command.userId
+            ),
+            requestingUser: loadEntity(
+              userRepo.findById(requestingUserId),
+              "User",
+              requestingUserId
+            ),
+          }),
+          Effect.mapError((e) =>
+            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
+          ),
+          // Check authorization
+          Effect.flatMap(({ user, requestingUser }) => {
+            const isAdmin = requestingUser.role === "ADMIN";
+            const isSelf = requestingUserId === command.userId;
 
-          const user = userOpt.value;
+            if (!isAdmin && !isSelf) {
+              return Effect.fail(
+                new ForbiddenError({
+                  message:
+                    "Only admins or the user themselves can delete a user",
+                  resource: `User:${command.userId}`,
+                })
+              );
+            }
 
-          // Check authorization: only admin or self can delete
-          const requestingUserOpt = yield* userRepo.findById(requestingUserId);
-          if (Option.isNone(requestingUserOpt)) {
-            return yield* Effect.fail(
-              new ForbiddenError({
-                message: "Unauthorized to delete user",
-                resource: `User:${command.userId}`,
-              })
-            );
-          }
-
-          const requestingUser = requestingUserOpt.value;
-          const isAdmin = requestingUser.role === "ADMIN";
-          const isSelf = requestingUserId === command.userId;
-
-          if (!isAdmin && !isSelf) {
-            return yield* Effect.fail(
-              new ForbiddenError({
-                message: "Only admins or the user themselves can delete a user",
-                resource: `User:${command.userId}`,
-              })
-            );
-          }
-
+            return Effect.succeed(user);
+          }),
           // Delete user
-          yield* userRepo.delete(command.userId);
-        }),
+          Effect.flatMap(() => userRepo.delete(command.userId)),
+          // Map errors
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
+        ),
         { userId: command.userId, requestingUserId }
       );
 

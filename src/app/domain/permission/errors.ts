@@ -38,8 +38,18 @@ export class InsufficientPermissionError extends Data.TaggedError(
   "InsufficientPermissionError"
 )<{
   readonly message: string;
-  readonly required: string;
-  readonly actual?: string;
+  readonly userId: string;
+  readonly documentId: string;
+  readonly requiredPermission: string;
+}> {}
+
+export class DocumentAccessDeniedError extends Data.TaggedError(
+  "DocumentAccessDeniedError"
+)<{
+  readonly message: string;
+  readonly userId: string;
+  readonly documentId: string;
+  readonly action: string;
 }> {}
 
 export class PermissionConstraintError extends Data.TaggedError(
@@ -57,4 +67,5 @@ export type PermissionDomainError =
   | PermissionValidationError
   | PermissionForbiddenError
   | InsufficientPermissionError
+  | DocumentAccessDeniedError
   | PermissionConstraintError;

@@ -1,5 +1,5 @@
-import { Effect, Option } from "effect";
-import { User, CreateUserPayload, UpdateUserPayload } from "./entity";
+import { Effect, Option, Context } from "effect";
+import { User } from "./entity";
 import { UserDomainError } from "./errors";
 import { UserId } from "../refined/uuid";
 import { EmailAddress } from "../refined/email";
@@ -9,14 +9,14 @@ import { EmailAddress } from "../refined/email";
  *
  * Defines the contract for user data persistence operations.
  * Implementations should be provided in the infrastructure layer.
+ *
+ * Repositories work with entities, not payloads.
  */
 export interface UserRepository {
   /**
-   * Create a new user
+   * Save a user (create or update)
    */
-  readonly create: (
-    payload: CreateUserPayload
-  ) => Effect.Effect<User, UserDomainError>;
+  readonly save: (user: User) => Effect.Effect<User, UserDomainError>;
 
   /**
    * Find user by ID
@@ -31,14 +31,6 @@ export interface UserRepository {
   readonly findByEmail: (
     email: EmailAddress
   ) => Effect.Effect<Option.Option<User>, UserDomainError>;
-
-  /**
-   * Update user
-   */
-  readonly update: (
-    id: UserId,
-    payload: UpdateUserPayload
-  ) => Effect.Effect<User, UserDomainError>;
 
   /**
    * Delete user
@@ -61,7 +53,6 @@ export interface UserRepository {
 /**
  * Context tag for dependency injection
  */
-import { Context } from "effect";
 export const UserRepositoryTag = Context.GenericTag<UserRepository>(
   "@app/UserRepository"
 );

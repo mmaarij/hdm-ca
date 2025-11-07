@@ -1,17 +1,10 @@
-import { Effect, Schema as S } from "effect";
+import { Effect } from "effect";
 import { User, UserPublic } from "./entity";
 import { UserRole } from "./value-object";
-import { validateUser, validateUserPublic } from "./schema";
 
 /**
  * User Domain Business Rules and Guards
  */
-
-/**
- * Validate if a user entity is valid
- */
-export const guardUser = (input: unknown): Effect.Effect<User, Error> =>
-  validateUser(input).pipe(Effect.mapError((e) => new Error(String(e))));
 
 /**
  * Check if user has admin role

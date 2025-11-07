@@ -25,6 +25,13 @@ export class DocumentAlreadyExistsError extends Data.TaggedError(
   readonly message?: string;
 }> {}
 
+export class DuplicateDocumentError extends Data.TaggedError(
+  "DuplicateDocumentError"
+)<{
+  readonly message: string;
+  readonly checksum: string;
+}> {}
+
 export class DocumentValidationError extends Data.TaggedError(
   "DocumentValidationError"
 )<{
@@ -52,6 +59,18 @@ export class DocumentConstraintError extends Data.TaggedError(
   readonly message: string;
 }> {}
 
+export class DocumentUpdateError extends Data.TaggedError(
+  "DocumentUpdateError"
+)<{
+  readonly message: string;
+}> {}
+
+export class DocumentInfrastructureError extends Data.TaggedError(
+  "DocumentInfrastructureError"
+)<{
+  readonly message: string;
+}> {}
+
 /**
  * Union of all Document domain errors
  */
@@ -59,7 +78,10 @@ export type DocumentDomainError =
   | DocumentNotFoundError
   | DocumentVersionNotFoundError
   | DocumentAlreadyExistsError
+  | DuplicateDocumentError
   | DocumentValidationError
   | DocumentForbiddenError
   | DocumentStorageError
-  | DocumentConstraintError;
+  | DocumentConstraintError
+  | DocumentUpdateError
+  | DocumentInfrastructureError;

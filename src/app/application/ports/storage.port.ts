@@ -6,6 +6,7 @@
  */
 
 import { Effect, Context } from "effect";
+import type { DocumentStorageError } from "../../domain/document/errors";
 
 /**
  * Uploaded file data from HTTP multipart form
@@ -48,7 +49,7 @@ export interface StoragePort {
     file: UploadedFile,
     documentId: string,
     versionId: string
-  ) => Effect.Effect<StoredFileInfo, Error>;
+  ) => Effect.Effect<StoredFileInfo, DocumentStorageError>;
 
   /**
    * Store file in organized structure: uploads/{docId}/{versionId}/{filename}
@@ -65,14 +66,16 @@ export interface StoragePort {
     filename: string,
     documentId: string,
     versionId: string
-  ) => Effect.Effect<string, Error>;
+  ) => Effect.Effect<string, DocumentStorageError>;
 
   /**
    * Delete a file from storage
    *
    * @param path - File path to delete
    */
-  readonly deleteFile: (path: string) => Effect.Effect<void, Error>;
+  readonly deleteFile: (
+    path: string
+  ) => Effect.Effect<void, DocumentStorageError>;
 
   /**
    * Get a temporary download URL for a file
@@ -84,7 +87,7 @@ export interface StoragePort {
   readonly getDownloadUrl: (
     path: string,
     expiresIn: number
-  ) => Effect.Effect<string, Error>;
+  ) => Effect.Effect<string, DocumentStorageError>;
 
   /**
    * Check if a file exists in storage
@@ -92,7 +95,9 @@ export interface StoragePort {
    * @param path - File path to check
    * @returns True if file exists
    */
-  readonly fileExists: (path: string) => Effect.Effect<boolean, Error>;
+  readonly fileExists: (
+    path: string
+  ) => Effect.Effect<boolean, DocumentStorageError>;
 
   /**
    * Get file metadata (size, last modified, etc.)
@@ -102,7 +107,7 @@ export interface StoragePort {
    */
   readonly getFileMetadata: (
     path: string
-  ) => Effect.Effect<FileMetadata, Error>;
+  ) => Effect.Effect<FileMetadata, DocumentStorageError>;
 }
 
 /**

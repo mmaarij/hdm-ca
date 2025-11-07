@@ -1,25 +1,15 @@
 import { Schema as S } from "effect";
-import {
-  User,
-  CreateUserPayload,
-  UpdateUserPayload,
-  UserPublic,
-} from "./entity";
 
 /**
- * Runtime validators for User domain
+ * User Domain Schemas
+ *
+ * Domain validation happens through:
+ * - Entity factory functions (User.create, User.update)
+ * - Domain guards (in guards.ts)
+ * - Value objects with branded types
+ *
+ * These schemas are used for external input validation (login, registration)
  */
-
-export const validateUser = (input: unknown) => S.decodeUnknown(User)(input);
-
-export const validateUserPublic = (input: unknown) =>
-  S.decodeUnknown(UserPublic)(input);
-
-export const validateCreateUserPayload = (input: unknown) =>
-  S.decodeUnknown(CreateUserPayload)(input);
-
-export const validateUpdateUserPayload = (input: unknown) =>
-  S.decodeUnknown(UpdateUserPayload)(input);
 
 /**
  * Login/Auth specific schemas

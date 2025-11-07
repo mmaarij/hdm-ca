@@ -1,4 +1,4 @@
-import { Schema as S } from "effect";
+import { Schema as S, Option } from "effect";
 import { randomBytes } from "crypto";
 
 /**
@@ -46,6 +46,6 @@ export const isTokenExpired = (expiresAt: Date): boolean => {
 /**
  * Check if a token has been used
  */
-export const isTokenUsed = (usedAt?: Date): boolean => {
-  return usedAt !== undefined;
+export const isTokenUsed = (usedAt: Option.Option<Date>): boolean => {
+  return Option.isSome(usedAt);
 };

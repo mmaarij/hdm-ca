@@ -5,7 +5,7 @@
  */
 
 import { Elysia } from "elysia";
-import { Effect } from "effect";
+import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { DownloadTokenWorkflowTag } from "../../../application/workflows/download-token-workflow";
 import * as DownloadDTOs from "../../../application/dtos/download-token";
@@ -29,35 +29,40 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        */
       .post("/generate", async ({ headers, body, request }) => {
         const reqHeaders = Object.fromEntries(request.headers.entries());
-        const effect = Effect.gen(function* () {
-          const downloadWorkflow = yield* DownloadTokenWorkflowTag;
-          const auth = yield* requireAuth();
+        const effect = pipe(
+          DownloadTokenWorkflowTag,
+          Effect.flatMap((downloadWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) => {
+                const requestBody = body as any;
+                const commandData = {
+                  documentId: requestBody.documentId,
+                  versionId: requestBody.versionId,
+                  ttlMs: requestBody.ttlMs,
+                  userId: auth.userId,
+                };
 
-          // Merge body with userId from auth
-          const requestBody = body as any;
-          const commandData = {
-            documentId: requestBody.documentId,
-            versionId: requestBody.versionId,
-            ttlMs: requestBody.ttlMs,
-            userId: auth.userId,
-          };
+                return pipe(
+                  validateBody(
+                    DownloadDTOs.GenerateDownloadLinkCommand,
+                    commandData
+                  ),
+                  Effect.flatMap((command) => {
+                    const protocol = reqHeaders["x-forwarded-proto"] || "http";
+                    const host = reqHeaders["host"] || "localhost:3000";
+                    const baseUrl = `${protocol}://${host}`;
 
-          const command = yield* validateBody(
-            DownloadDTOs.GenerateDownloadLinkCommand,
-            commandData
-          );
-
-          // Get base URL from request
-          const protocol = reqHeaders["x-forwarded-proto"] || "http";
-          const host = reqHeaders["host"] || "localhost:3000";
-          const baseUrl = `${protocol}://${host}`;
-
-          const result = yield* downloadWorkflow.generateDownloadLink(
-            command,
-            baseUrl
-          );
-          return result;
-        });
+                    return downloadWorkflow.generateDownloadLink(
+                      command,
+                      baseUrl
+                    );
+                  })
+                );
+              })
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -72,17 +77,15 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        */
       .get("/validate/:token", async ({ params, request }) => {
         const reqHeaders = Object.fromEntries(request.headers.entries());
-        const effect = Effect.gen(function* () {
-          const downloadWorkflow = yield* DownloadTokenWorkflowTag;
-
-          const query = yield* validateParams(
-            DownloadDTOs.ValidateDownloadTokenQuery,
-            params
-          );
-
-          const result = yield* downloadWorkflow.validateToken(query);
-          return result;
-        });
+        const effect = pipe(
+          DownloadTokenWorkflowTag,
+          Effect.flatMap((downloadWorkflow) =>
+            pipe(
+              validateParams(DownloadDTOs.ValidateDownloadTokenQuery, params),
+              Effect.flatMap((query) => downloadWorkflow.validateToken(query))
+            )
+          )
+        );
 
         return runEffect(effect as any, runtime, reqHeaders);
       })
@@ -94,48 +97,55 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        */
       .get("/:token", async ({ params, set, request }) => {
         const reqHeaders = Object.fromEntries(request.headers.entries());
-        const effect = Effect.gen(function* () {
-          const downloadWorkflow = yield* DownloadTokenWorkflowTag;
-
-          const query = yield* validateParams(
-            DownloadDTOs.DownloadFileQuery,
-            params
-          );
-
-          // Get file metadata from workflow
-          const fileInfo = yield* downloadWorkflow.downloadFile(query);
-
-          // Check if file exists
-          const fileExists = yield* Effect.tryPromise({
-            try: () =>
-              fs
-                .access(fileInfo.path)
-                .then(() => true)
-                .catch(() => false),
-            catch: () => new Error("Failed to check file existence"),
-          });
-
-          if (!fileExists) {
-            return yield* Effect.fail(
-              new Error(`File not found at path: ${fileInfo.path}`)
-            );
-          }
-
-          // Read file
-          const fileBuffer = yield* Effect.tryPromise({
-            try: () => fs.readFile(fileInfo.path),
-            catch: (error) => new Error(`Failed to read file: ${error}`),
-          });
-
-          // Set headers for file download
-          set.headers["Content-Type"] = fileInfo.mimeType;
-          set.headers[
-            "Content-Disposition"
-          ] = `attachment; filename="${fileInfo.filename}"`;
-          set.headers["Content-Length"] = fileInfo.size.toString();
-
-          return fileBuffer;
-        });
+        const effect = pipe(
+          DownloadTokenWorkflowTag,
+          Effect.flatMap((downloadWorkflow) =>
+            pipe(
+              validateParams(DownloadDTOs.DownloadFileQuery, params),
+              Effect.flatMap((query) => downloadWorkflow.downloadFile(query)),
+              // Check if file exists
+              Effect.flatMap((fileInfo) =>
+                pipe(
+                  Effect.tryPromise({
+                    try: () =>
+                      fs
+                        .access(fileInfo.path)
+                        .then(() => true)
+                        .catch(() => false),
+                    catch: () => new Error("Failed to check file existence"),
+                  }),
+                  Effect.flatMap((fileExists) =>
+                    fileExists
+                      ? Effect.succeed(fileInfo)
+                      : Effect.fail(
+                          new Error(`File not found at path: ${fileInfo.path}`)
+                        )
+                  )
+                )
+              ),
+              // Read file
+              Effect.flatMap((fileInfo) =>
+                pipe(
+                  Effect.tryPromise({
+                    try: () => fs.readFile(fileInfo.path),
+                    catch: (error) =>
+                      new Error(`Failed to read file: ${error}`),
+                  }),
+                  Effect.map((fileBuffer) => ({ fileInfo, fileBuffer }))
+                )
+              ),
+              // Set headers and return buffer
+              Effect.map(({ fileInfo, fileBuffer }) => {
+                set.headers["Content-Type"] = fileInfo.mimeType;
+                set.headers[
+                  "Content-Disposition"
+                ] = `attachment; filename="${fileInfo.filename}"`;
+                set.headers["Content-Length"] = fileInfo.size.toString();
+                return fileBuffer;
+              })
+            )
+          )
+        );
 
         return runEffect(effect as any, runtime, reqHeaders);
       })
@@ -146,17 +156,19 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        */
       .delete("/cleanup", async ({ headers, request }) => {
         const reqHeaders = Object.fromEntries(request.headers.entries());
-        const effect = Effect.gen(function* () {
-          const downloadWorkflow = yield* DownloadTokenWorkflowTag;
-          const auth = yield* requireAuth();
-
-          const command: DownloadDTOs.CleanupExpiredTokensCommand = {
-            userId: auth.userId as any,
-          };
-
-          const result = yield* downloadWorkflow.cleanupExpiredTokens(command);
-          return result;
-        });
+        const effect = pipe(
+          DownloadTokenWorkflowTag,
+          Effect.flatMap((downloadWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                downloadWorkflow.cleanupExpiredTokens({
+                  userId: auth.userId as any,
+                })
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,

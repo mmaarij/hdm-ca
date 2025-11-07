@@ -1,119 +1,53 @@
 import { Effect, Option, Context } from "effect";
-import {
-  Document,
-  DocumentVersion,
-  CreateDocumentPayload,
-  CreateDocumentVersionPayload,
-  UpdateDocumentPayload,
-  UpdateDocumentVersionPayload,
-  DocumentWithVersion,
-} from "./entity";
+import { Document, DocumentVersion, DocumentWithVersion } from "./entity";
 import { DocumentDomainError } from "./errors";
-import { DocumentId, DocumentVersionId, UserId } from "../refined/uuid";
+import { DocumentId, UserId } from "../refined/uuid";
 import { Checksum, ContentRef } from "./value-object";
-
-/**
- * Pagination parameters
- */
-export interface PaginationParams {
-  readonly page: number;
-  readonly limit: number;
-}
-
-/**
- * Pagination metadata
- */
-export interface PaginationMeta {
-  readonly page: number;
-  readonly limit: number;
-  readonly totalItems: number;
-  readonly totalPages: number;
-  readonly hasNextPage: boolean;
-  readonly hasPreviousPage: boolean;
-}
-
-/**
- * Paginated result
- */
-export interface Paginated<T> {
-  readonly data: readonly T[];
-  readonly meta: PaginationMeta;
-}
+import { PaginationParams, Paginated } from "../shared/pagination";
 
 /**
  * Document Repository Interface
  *
  * Defines the contract for document data persistence operations.
+ *
+ * Document is the aggregate root. Versions are managed internally
+ * and should not be directly exposed through the repository interface
+ * for external manipulation.
  */
 export interface DocumentRepository {
   /**
-   * Create a new document
+   * Save a document (creates or updates the aggregate including all versions)
    */
-  readonly createDocument: (
-    payload: CreateDocumentPayload
+  readonly save: (
+    document: Document
   ) => Effect.Effect<Document, DocumentDomainError>;
 
   /**
-   * Create a new document version
+   * Find document by ID (loads the aggregate)
    */
-  /**
-   * Create a new document version.
-   *
-   * DocumentVersion instances are part of the Document aggregate
-   * and should be prepared/managed via the aggregate root in domain logic.
-   * Repository implementations still persist versions, but application code
-   * should create the version payload using the aggregate (for example
-   * DocumentAggregate.prepareAddVersion) and then call this method. External
-   * code should not mutate DocumentVersion instances directly.
-   */
-  readonly createVersion: (
-    payload: CreateDocumentVersionPayload
-  ) => Effect.Effect<DocumentVersion, DocumentDomainError>;
-
-  /**
-   * Find document by ID
-   */
-  readonly findDocument: (
+  readonly findById: (
     id: DocumentId
   ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
 
   /**
-   * Find version by ID
+   * Find document by version checksum (for idempotency checks)
+   * Returns the parent document, not the version directly
    */
-  readonly findVersionById: (
-    id: DocumentVersionId
-  ) => Effect.Effect<Option.Option<DocumentVersion>, DocumentDomainError>;
-
-  /**
-   * Find version by checksum (for idempotency)
-   */
-  readonly findVersionByChecksum: (
+  readonly findByChecksum: (
     checksum: Checksum
-  ) => Effect.Effect<Option.Option<DocumentVersion>, DocumentDomainError>;
+  ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
 
   /**
-   * Find version by content reference
+   * Find document by content reference
+   * Returns the parent document, not the version directly
    */
-  readonly findVersionByContentRef: (
+  readonly findByContentRef: (
     contentRef: ContentRef
-  ) => Effect.Effect<Option.Option<DocumentVersion>, DocumentDomainError>;
-
-  /**
-   * Get latest version of a document
-   */
-  readonly getLatestVersion: (
-    documentId: DocumentId
-  ) => Effect.Effect<Option.Option<DocumentVersion>, DocumentDomainError>;
-
-  /**
-   * List all versions for a given document
-   */
-  readonly listVersions: (
-    documentId: DocumentId
-  ) => Effect.Effect<readonly DocumentVersion[], DocumentDomainError>;
+  ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
 
   /**
    * List documents by user with pagination
+   * Returns documents with their latest version for display
    */
   readonly listByUser: (
     userId: UserId,
@@ -121,14 +55,14 @@ export interface DocumentRepository {
   ) => Effect.Effect<Paginated<DocumentWithVersion>, DocumentDomainError>;
 
   /**
-   * List all documents with pagination (admin)
+   * List all documents with pagination
    */
   readonly listAll: (
     pagination: PaginationParams
   ) => Effect.Effect<Paginated<DocumentWithVersion>, DocumentDomainError>;
 
   /**
-   * Search documents by query (returns unique documents, not versions)
+   * Search documents by query
    */
   readonly search: (
     query: string,
@@ -136,37 +70,19 @@ export interface DocumentRepository {
   ) => Effect.Effect<Paginated<Document>, DocumentDomainError>;
 
   /**
-   * Update document
+   * Delete document (and all its versions)
    */
-  readonly updateDocument: (
-    id: DocumentId,
-    payload: UpdateDocumentPayload
-  ) => Effect.Effect<Document, DocumentDomainError>;
-
-  /**
-   * Update document version
-   */
-  readonly updateVersion: (
-    id: DocumentVersionId,
-    payload: UpdateDocumentVersionPayload
-  ) => Effect.Effect<DocumentVersion, DocumentDomainError>;
-
-  /**
-   * Delete document (and all versions)
-   */
-  readonly deleteDocument: (
-    id: DocumentId
-  ) => Effect.Effect<void, DocumentDomainError>;
+  readonly delete: (id: DocumentId) => Effect.Effect<void, DocumentDomainError>;
 
   /**
    * Add audit log entry
    */
-  readonly addAudit: (payload: {
-    documentId: DocumentId;
-    action: string;
-    performedBy: UserId;
-    details?: string;
-  }) => Effect.Effect<void, DocumentDomainError>;
+  readonly addAudit: (
+    documentId: DocumentId,
+    action: string,
+    performedBy: UserId,
+    details: Option.Option<string>
+  ) => Effect.Effect<void, DocumentDomainError>;
 }
 
 /**

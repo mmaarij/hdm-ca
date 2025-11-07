@@ -6,15 +6,15 @@
 
 import { describe, test, expect, beforeEach } from "bun:test";
 import {
-  evaluateDocumentAccess,
   isDocumentOwner,
   isAdmin,
   hasExplicitPermission,
-  canRead,
-  canWrite,
-  canDelete,
   getHighestPermission,
-} from "../../app/domain/permission/access-service";
+  requireReadPermission,
+  requireWritePermission,
+  requireDeletePermission,
+} from "../../app/domain/permission/service";
+import { Effect } from "effect";
 import {
   resetFactories,
   makeTestUser,

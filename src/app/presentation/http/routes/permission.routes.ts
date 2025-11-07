@@ -5,7 +5,7 @@
  */
 
 import { Elysia } from "elysia";
-import { Effect } from "effect";
+import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { PermissionWorkflowTag } from "../../../application/workflows/permission-workflow";
 import * as PermissionDTOs from "../../../application/dtos/permission";
@@ -24,19 +24,25 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Grant permission to a user
        */
       .post("/grant", async ({ headers, body }) => {
-        const effect = Effect.gen(function* () {
-          const permissionWorkflow = yield* PermissionWorkflowTag;
-          const auth = yield* requireAuth();
-          const command = yield* validateBody(
-            PermissionDTOs.GrantPermissionCommand,
-            {
-              ...(body as any),
-              grantedBy: auth.userId,
-            }
-          );
-          const result = yield* permissionWorkflow.grantPermission(command);
-          return result;
-        });
+        const effect = pipe(
+          PermissionWorkflowTag,
+          Effect.flatMap((permissionWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                pipe(
+                  validateBody(PermissionDTOs.GrantPermissionCommand, {
+                    ...(body as any),
+                    grantedBy: auth.userId,
+                  }),
+                  Effect.flatMap((command) =>
+                    permissionWorkflow.grantPermission(command)
+                  )
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -49,20 +55,26 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Update permission
        */
       .put("/:permissionId", async ({ headers, params, body }) => {
-        const effect = Effect.gen(function* () {
-          const permissionWorkflow = yield* PermissionWorkflowTag;
-          const auth = yield* requireAuth();
-          const command = yield* validateBody(
-            PermissionDTOs.UpdatePermissionCommand,
-            {
-              permissionId: params.permissionId,
-              updatedBy: auth.userId,
-              ...(body as any),
-            }
-          );
-          const result = yield* permissionWorkflow.updatePermission(command);
-          return result;
-        });
+        const effect = pipe(
+          PermissionWorkflowTag,
+          Effect.flatMap((permissionWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                pipe(
+                  validateBody(PermissionDTOs.UpdatePermissionCommand, {
+                    permissionId: params.permissionId,
+                    updatedBy: auth.userId,
+                    ...(body as any),
+                  }),
+                  Effect.flatMap((command) =>
+                    permissionWorkflow.updatePermission(command)
+                  )
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -75,15 +87,21 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Revoke permission
        */
       .delete("/:permissionId", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const permissionWorkflow = yield* PermissionWorkflowTag;
-          const auth = yield* requireAuth();
-          yield* permissionWorkflow.revokePermission({
-            permissionId: params.permissionId as any,
-            revokedBy: auth.userId as any,
-          });
-          return { message: "Permission revoked successfully" };
-        });
+        const effect = pipe(
+          PermissionWorkflowTag,
+          Effect.flatMap((permissionWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                permissionWorkflow.revokePermission({
+                  permissionId: params.permissionId as any,
+                  revokedBy: auth.userId as any,
+                })
+              ),
+              Effect.map(() => ({ message: "Permission revoked successfully" }))
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -96,15 +114,20 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * List permissions for a document
        */
       .get("/document/:documentId", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const permissionWorkflow = yield* PermissionWorkflowTag;
-          const auth = yield* requireAuth();
-          const result = yield* permissionWorkflow.listDocumentPermissions({
-            documentId: params.documentId as any,
-            userId: auth.userId as any,
-          });
-          return result;
-        });
+        const effect = pipe(
+          PermissionWorkflowTag,
+          Effect.flatMap((permissionWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                permissionWorkflow.listDocumentPermissions({
+                  documentId: params.documentId as any,
+                  userId: auth.userId as any,
+                })
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -117,14 +140,19 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * List permissions for a user
        */
       .get("/user/:userId", async ({ headers, params }) => {
-        const effect = Effect.gen(function* () {
-          const permissionWorkflow = yield* PermissionWorkflowTag;
-          yield* requireAuth();
-          const result = yield* permissionWorkflow.listUserPermissions({
-            userId: params.userId as any,
-          });
-          return result;
-        });
+        const effect = pipe(
+          PermissionWorkflowTag,
+          Effect.flatMap((permissionWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap(() =>
+                permissionWorkflow.listUserPermissions({
+                  userId: params.userId as any,
+                })
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
@@ -137,16 +165,22 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        * Check if user has permission
        */
       .get("/check", async ({ headers, query }) => {
-        const effect = Effect.gen(function* () {
-          const permissionWorkflow = yield* PermissionWorkflowTag;
-          yield* requireAuth();
-          const queryParams = yield* validateQuery(
-            PermissionDTOs.CheckPermissionQuery,
-            query
-          );
-          const result = yield* permissionWorkflow.checkPermission(queryParams);
-          return result;
-        });
+        const effect = pipe(
+          PermissionWorkflowTag,
+          Effect.flatMap((permissionWorkflow) =>
+            pipe(
+              requireAuth(),
+              Effect.flatMap(() =>
+                pipe(
+                  validateQuery(PermissionDTOs.CheckPermissionQuery, query),
+                  Effect.flatMap((queryParams) =>
+                    permissionWorkflow.checkPermission(queryParams)
+                  )
+                )
+              )
+            )
+          )
+        );
 
         return runEffect(
           withAuth(effect, headers.authorization) as any,
