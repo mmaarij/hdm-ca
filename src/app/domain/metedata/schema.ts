@@ -1,15 +1,43 @@
+import { Schema as S } from "effect";
+import { DocumentId, Uuid } from "../refined/uuid";
+import { DateTime } from "../refined/date-time";
+import { MetadataKey, MetadataValue } from "./value-object";
+
 /**
- * Metadata Schema
+ * Metadata Domain Schemas
  *
- * This file is reserved for Effect Schema validators if needed in the future.
- * Currently, we use TypeScript types for compile-time validation and
- * entity factory functions for runtime construction.
- *
- * Domain validation happens through:
- * - Entity factory functions (DocumentMetadata.create, DocumentMetadata.updateValue)
- * - Domain guards (in guards.ts)
- * - Value objects with branded types
+ * These schemas are used for validation and encoding/decoding of metadata entities.
+ * They define the structure for external input/output and ensure data integrity.
  */
 
-// Export placeholder to make this a valid module
-export {};
+// ============================================================================
+// Metadata ID Schema
+// ============================================================================
+
+/**
+ * Metadata ID Schema
+ */
+export const MetadataId = Uuid.pipe(S.brand("MetadataId"));
+export type MetadataId = S.Schema.Type<typeof MetadataId>;
+
+// ============================================================================
+// DocumentMetadata Schema
+// ============================================================================
+
+/**
+ * DocumentMetadata Schema for validation and encoding/decoding
+ */
+export const DocumentMetadataSchema = S.Struct({
+  id: MetadataId,
+  documentId: DocumentId,
+  key: MetadataKey,
+  value: MetadataValue,
+  createdAt: S.optional(DateTime),
+});
+
+/**
+ * Type derived from DocumentMetadata Schema
+ */
+export type DocumentMetadataSchemaType = S.Schema.Type<
+  typeof DocumentMetadataSchema
+>;

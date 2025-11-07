@@ -1,15 +1,57 @@
+import { Schema as S } from "effect";
+import {
+  DownloadTokenId,
+  DocumentId,
+  DocumentVersionId,
+  UserId,
+} from "../refined/uuid";
+import { DateTime } from "../refined/date-time";
+import { Token } from "./value-object";
+
 /**
- * Download Token Schema
+ * Download Token Domain Schemas
  *
- * This file is reserved for Effect Schema validators if needed in the future.
- * Currently, we use TypeScript types for compile-time validation and
- * entity factory functions for runtime construction.
- *
- * Domain validation happens through:
- * - Entity factory functions (DownloadToken.create, DownloadToken.markAsUsed)
- * - Domain guards (in guards.ts)
- * - Value objects with branded types
+ * These schemas are used for validation and encoding/decoding of download token entities.
+ * They define the structure for external input/output and ensure data integrity.
  */
 
-// Export placeholder to make this a valid module
-export {};
+// ============================================================================
+// DownloadToken Schema
+// ============================================================================
+
+/**
+ * DownloadToken Schema for validation and encoding/decoding
+ */
+export const DownloadTokenSchema = S.Struct({
+  id: DownloadTokenId,
+  documentId: DocumentId,
+  versionId: S.optional(DocumentVersionId),
+  token: Token,
+  expiresAt: DateTime,
+  usedAt: S.optional(DateTime),
+  createdBy: UserId,
+  createdAt: S.optional(DateTime),
+});
+
+/**
+ * Type derived from DownloadToken Schema
+ */
+export type DownloadTokenSchemaType = S.Schema.Type<typeof DownloadTokenSchema>;
+
+/**
+ * DownloadTokenWithDocument Schema for API responses
+ */
+export const DownloadTokenWithDocumentSchema = S.Struct({
+  token: Token,
+  documentId: DocumentId,
+  versionId: S.optional(DocumentVersionId),
+  expiresAt: DateTime,
+  downloadUrl: S.String,
+});
+
+/**
+ * Type derived from DownloadTokenWithDocument Schema
+ */
+export type DownloadTokenWithDocumentSchemaType = S.Schema.Type<
+  typeof DownloadTokenWithDocumentSchema
+>;

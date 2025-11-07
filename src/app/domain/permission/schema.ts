@@ -1,15 +1,44 @@
+import { Schema as S } from "effect";
+import { DocumentId, UserId, Uuid } from "../refined/uuid";
+import { DateTime } from "../refined/date-time";
+import { PermissionType } from "./value-object";
+
 /**
- * Permission Schema
+ * Permission Domain Schemas
  *
- * This file is reserved for Effect Schema validators if needed in the future.
- * Currently, we use TypeScript types for compile-time validation and
- * entity factory functions for runtime construction.
- *
- * Domain validation happens through:
- * - Entity factory functions (DocumentPermission.create, DocumentPermission.updatePermission)
- * - Domain guards (in guards.ts)
- * - Value objects with branded types
+ * These schemas are used for validation and encoding/decoding of permission entities.
+ * They define the structure for external input/output and ensure data integrity.
  */
 
-// Export placeholder to make this a valid module
-export {};
+// ============================================================================
+// Permission ID Schema
+// ============================================================================
+
+/**
+ * Permission ID Schema (using generic Uuid)
+ */
+export const PermissionId = Uuid.pipe(S.brand("PermissionId"));
+export type PermissionId = S.Schema.Type<typeof PermissionId>;
+
+// ============================================================================
+// DocumentPermission Schema
+// ============================================================================
+
+/**
+ * DocumentPermission Schema for validation and encoding/decoding
+ */
+export const DocumentPermissionSchema = S.Struct({
+  id: PermissionId,
+  documentId: DocumentId,
+  userId: UserId,
+  permission: PermissionType,
+  grantedBy: UserId,
+  grantedAt: S.optional(DateTime),
+});
+
+/**
+ * Type derived from DocumentPermission Schema
+ */
+export type DocumentPermissionSchemaType = S.Schema.Type<
+  typeof DocumentPermissionSchema
+>;

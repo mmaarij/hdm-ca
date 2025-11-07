@@ -1,38 +1,219 @@
-import { Schema as S, Option } from "effect";
+import { Schema as S, Option, Effect as E, pipe } from "effect";
 import { UserId } from "../refined/uuid";
 import { EmailAddress } from "../refined/email";
 import { HashedPassword } from "../refined/password";
-import { DateTime } from "../refined/date-time";
 import { UserRole } from "./value-object";
 import { v4 as uuidv4 } from "uuid";
+import {
+  BaseEntity,
+  IEntity,
+  Maybe,
+  normalizeMaybe,
+  optionToMaybe,
+} from "../shared/base-entity";
+import { UserValidationError } from "./errors";
+import { UserSchema, UserPublicSchema } from "./schema";
+
+// ============================================================================
+// Serialized Types
+// ============================================================================
+export type SerializedUser = {
+  readonly id: string;
+  readonly email: string;
+  readonly password: string;
+  readonly role: string;
+  readonly createdAt?: Date;
+  readonly updatedAt?: Date;
+};
 
 /**
- * User Entity - Pure Domain Model
+ * Serialized UserPublic type (without sensitive fields)
+ */
+export type SerializedUserPublic = {
+  readonly id: string;
+  readonly email: string;
+  readonly role: string;
+  readonly createdAt?: Date;
+  readonly updatedAt?: Date;
+};
+
+// ============================================================================
+// User Entity
+// ============================================================================
+
+/**
+ * User Entity - Aggregate Root
  *
  * Represents an authenticated user in the system.
  */
-export interface User {
-  readonly id: UserId;
-  readonly email: EmailAddress;
-  readonly password: HashedPassword;
-  readonly role: UserRole;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
+export class UserEntity extends BaseEntity implements IEntity {
+  constructor(
+    public readonly id: UserId,
+    public readonly email: EmailAddress,
+    public readonly password: HashedPassword,
+    public readonly role: UserRole,
+    public readonly createdAt: Date,
+    public readonly updatedAt: Date
+  ) {
+    super();
+  }
+
+  /**
+   * Create a new user with validation
+   */
+  static create(
+    input: SerializedUser
+  ): E.Effect<UserEntity, UserValidationError, never> {
+    return pipe(
+      S.decodeUnknown(UserSchema)(input),
+      E.flatMap((data) => {
+        return E.succeed(
+          new UserEntity(
+            data.id,
+            data.email,
+            data.password,
+            data.role,
+            data.createdAt ?? new Date(),
+            data.updatedAt ?? new Date()
+          )
+        );
+      }),
+      E.mapError(
+        (error) =>
+          new UserValidationError({
+            message: `User validation failed: ${error}`,
+          })
+      )
+    );
+  }
+
+  /**
+   * Update user
+   */
+  update(updates: {
+    email?: EmailAddress;
+    password?: HashedPassword;
+    role?: UserRole;
+  }): UserEntity {
+    return new UserEntity(
+      this.id,
+      updates.email ?? this.email,
+      updates.password ?? this.password,
+      updates.role ?? this.role,
+      this.createdAt,
+      new Date()
+    );
+  }
+
+  /**
+   * Convert User to UserPublic (remove password)
+   */
+  toPublic(): UserPublicEntity {
+    return new UserPublicEntity(
+      this.id,
+      this.email,
+      this.role,
+      this.createdAt,
+      this.updatedAt
+    );
+  }
+
+  /**
+   * Serialize to external format
+   */
+  serialize(): SerializedUser {
+    return {
+      id: this.id,
+      email: this.email,
+      password: this.password,
+      role: this.role,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+    };
+  }
 }
 
+// ============================================================================
+// UserPublic Entity
+// ============================================================================
+
 /**
- * User without sensitive fields (for API responses)
+ * UserPublic Entity - User without sensitive information
+ *
+ * Used for API responses where password should not be exposed.
  */
-export interface UserPublic {
-  readonly id: UserId;
-  readonly email: EmailAddress;
-  readonly role: UserRole;
-  readonly createdAt: Date;
-  readonly updatedAt: Date;
+export class UserPublicEntity extends BaseEntity implements IEntity {
+  constructor(
+    public readonly id: UserId,
+    public readonly email: EmailAddress,
+    public readonly role: UserRole,
+    public readonly createdAt: Date,
+    public readonly updatedAt: Date
+  ) {
+    super();
+  }
+
+  /**
+   * Create a UserPublic entity with validation
+   */
+  static create(
+    input: SerializedUserPublic
+  ): E.Effect<UserPublicEntity, UserValidationError, never> {
+    return pipe(
+      S.decodeUnknown(UserPublicSchema)(input),
+      E.flatMap((data) => {
+        return E.succeed(
+          new UserPublicEntity(
+            data.id,
+            data.email,
+            data.role,
+            data.createdAt ?? new Date(),
+            data.updatedAt ?? new Date()
+          )
+        );
+      }),
+      E.mapError(
+        (error) =>
+          new UserValidationError({
+            message: `User public validation failed: ${error}`,
+          })
+      )
+    );
+  }
+
+  /**
+   * Serialize to external format
+   */
+  serialize(): SerializedUserPublic {
+    return {
+      id: this.id,
+      email: this.email,
+      role: this.role,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+    };
+  }
 }
 
+// ============================================================================
+// Legacy Type Aliases and Factory Functions (for backward compatibility)
+// ============================================================================
+
 /**
- * Factory functions for User entity
+ * Legacy User type alias
+ * @deprecated Use UserEntity instead
+ */
+export type User = UserEntity;
+
+/**
+ * Legacy UserPublic type alias
+ * @deprecated Use UserPublicEntity instead
+ */
+export type UserPublic = UserPublicEntity;
+
+/**
+ * Legacy User factory functions
+ * @deprecated Use UserEntity methods instead
  */
 export const User = {
   /**
@@ -42,71 +223,32 @@ export const User = {
     email: EmailAddress;
     password: HashedPassword;
     role?: UserRole;
-  }): User => {
+  }): UserEntity => {
     const now = new Date();
-    return {
-      id: uuidv4() as UserId,
-      email: props.email,
-      password: props.password,
-      role: props.role ?? ("USER" as UserRole),
-      createdAt: now,
-      updatedAt: now,
-    };
+    return new UserEntity(
+      uuidv4() as UserId,
+      props.email,
+      props.password,
+      props.role ?? ("USER" as UserRole),
+      now,
+      now
+    );
   },
 
   /**
    * Update user
    */
   update: (
-    user: User,
+    user: UserEntity,
     updates: {
       email?: EmailAddress;
       password?: HashedPassword;
       role?: UserRole;
     }
-  ): User => ({
-    ...user,
-    email: updates.email ?? user.email,
-    password: updates.password ?? user.password,
-    role: updates.role ?? user.role,
-    updatedAt: new Date(),
-  }),
+  ): UserEntity => user.update(updates),
 
   /**
    * Convert User to UserPublic (remove password)
    */
-  toPublic: (user: User): UserPublic => ({
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-  }),
+  toPublic: (user: UserEntity): UserPublicEntity => user.toPublic(),
 };
-
-// ============================================================================
-// Schema Definitions for Validation (kept for backward compatibility)
-// ============================================================================
-
-/**
- * User Schema for validation
- */
-export const UserSchema = S.Struct({
-  id: UserId,
-  email: EmailAddress,
-  password: HashedPassword,
-  role: UserRole,
-  createdAt: S.optional(DateTime),
-  updatedAt: S.optional(DateTime),
-});
-
-/**
- * UserPublic Schema for validation
- */
-export const UserPublicSchema = S.Struct({
-  id: UserId,
-  email: EmailAddress,
-  role: UserRole,
-  createdAt: S.optional(DateTime),
-  updatedAt: S.optional(DateTime),
-});

@@ -1,33 +1,123 @@
-import { Schema as S, Option } from "effect";
+import { Schema as S, Option, Effect as E, pipe } from "effect";
 import { DocumentId, UserId } from "../refined/uuid";
-import { DateTime } from "../refined/date-time";
 import { PermissionType } from "./value-object";
 import { v4 as uuidv4 } from "uuid";
+import {
+  BaseEntity,
+  IEntity,
+  Maybe,
+  normalizeMaybe,
+  optionToMaybe,
+} from "../shared/base-entity";
+import { PermissionValidationError } from "./errors";
+import { PermissionId, DocumentPermissionSchema } from "./schema";
+
+// ============================================================================
+// Serialized Types
+// ============================================================================
+export type SerializedDocumentPermission = {
+  readonly id: string;
+  readonly documentId: string;
+  readonly userId: string;
+  readonly permission: string;
+  readonly grantedBy: string;
+  readonly grantedAt?: Date;
+};
+
+// ============================================================================
+// DocumentPermission Entity
+// ============================================================================
 
 /**
- * Permission ID Schema (using generic Uuid)
- */
-import { Uuid } from "../refined/uuid";
-
-export const PermissionId = Uuid.pipe(S.brand("PermissionId"));
-export type PermissionId = S.Schema.Type<typeof PermissionId>;
-
-/**
- * Document Permission Entity - Pure Domain Model
+ * Document Permission Entity - Aggregate Root
  *
  * Represents an access control rule for a document.
  */
-export interface DocumentPermission {
-  readonly id: PermissionId;
-  readonly documentId: DocumentId;
-  readonly userId: UserId;
-  readonly permission: PermissionType;
-  readonly grantedBy: UserId;
-  readonly grantedAt: Date;
+export class DocumentPermissionEntity extends BaseEntity implements IEntity {
+  constructor(
+    public readonly id: PermissionId,
+    public readonly documentId: DocumentId,
+    public readonly userId: UserId,
+    public readonly permission: PermissionType,
+    public readonly grantedBy: UserId,
+    public readonly grantedAt: Date
+  ) {
+    super();
+  }
+
+  /**
+   * Create a new permission with validation
+   */
+  static create(
+    input: SerializedDocumentPermission
+  ): E.Effect<DocumentPermissionEntity, PermissionValidationError, never> {
+    return pipe(
+      S.decodeUnknown(DocumentPermissionSchema)(input),
+      E.flatMap((data) => {
+        return E.succeed(
+          new DocumentPermissionEntity(
+            data.id,
+            data.documentId,
+            data.userId,
+            data.permission,
+            data.grantedBy,
+            data.grantedAt ?? new Date()
+          )
+        );
+      }),
+      E.mapError(
+        (error) =>
+          new PermissionValidationError({
+            message: `Permission validation failed: ${error}`,
+          })
+      )
+    );
+  }
+
+  /**
+   * Update permission level
+   */
+  updatePermission(
+    newPermissionType: PermissionType
+  ): DocumentPermissionEntity {
+    return new DocumentPermissionEntity(
+      this.id,
+      this.documentId,
+      this.userId,
+      newPermissionType,
+      this.grantedBy,
+      this.grantedAt
+    );
+  }
+
+  /**
+   * Serialize to external format
+   */
+  serialize(): SerializedDocumentPermission {
+    return {
+      id: this.id,
+      documentId: this.documentId,
+      userId: this.userId,
+      permission: this.permission,
+      grantedBy: this.grantedBy,
+      grantedAt: this.grantedAt,
+    };
+  }
 }
 
+// ============================================================================
+// Legacy Type Aliases and Factory Functions (for backward compatibility)
+// ============================================================================
+
 /**
- * Factory functions for DocumentPermission entity
+ * Legacy DocumentPermission type alias
+ * @deprecated Use DocumentPermissionEntity instead
+ */
+export type DocumentPermission = DocumentPermissionEntity;
+
+/**
+ * Legacy DocumentPermission factory functions
+ * @deprecated Use DocumentPermissionEntity methods instead
  */
 export const DocumentPermission = {
   /**
@@ -38,39 +128,22 @@ export const DocumentPermission = {
     userId: UserId;
     permission: PermissionType;
     grantedBy: UserId;
-  }): DocumentPermission => ({
-    id: uuidv4() as PermissionId,
-    documentId: props.documentId,
-    userId: props.userId,
-    permission: props.permission,
-    grantedBy: props.grantedBy,
-    grantedAt: new Date(),
-  }),
+  }): DocumentPermissionEntity => {
+    return new DocumentPermissionEntity(
+      uuidv4() as PermissionId,
+      props.documentId,
+      props.userId,
+      props.permission,
+      props.grantedBy,
+      new Date()
+    );
+  },
 
   /**
    * Update permission level
    */
   updatePermission: (
-    permission: DocumentPermission,
+    permission: DocumentPermissionEntity,
     newPermissionType: PermissionType
-  ): DocumentPermission => ({
-    ...permission,
-    permission: newPermissionType,
-  }),
+  ): DocumentPermissionEntity => permission.updatePermission(newPermissionType),
 };
-
-// ============================================================================
-// Schema Definitions for Validation (kept for backward compatibility)
-// ============================================================================
-
-/**
- * DocumentPermission Schema for validation
- */
-export const DocumentPermissionSchema = S.Struct({
-  id: PermissionId,
-  documentId: DocumentId,
-  userId: UserId,
-  permission: PermissionType,
-  grantedBy: UserId,
-  grantedAt: S.optional(DateTime),
-});

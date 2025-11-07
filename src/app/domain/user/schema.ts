@@ -1,15 +1,57 @@
 import { Schema as S } from "effect";
+import { UserId } from "../refined/uuid";
+import { EmailAddress } from "../refined/email";
+import { HashedPassword } from "../refined/password";
+import { DateTime } from "../refined/date-time";
+import { UserRole } from "./value-object";
 
 /**
  * User Domain Schemas
  *
- * Domain validation happens through:
- * - Entity factory functions (User.create, User.update)
- * - Domain guards (in guards.ts)
- * - Value objects with branded types
- *
- * These schemas are used for external input validation (login, registration)
+ * Contains both entity schemas (for validation and encoding/decoding)
+ * and specific use-case schemas (login, registration).
  */
+
+// ============================================================================
+// Entity Schemas
+// ============================================================================
+
+/**
+ * User Schema for validation and encoding/decoding
+ */
+export const UserSchema = S.Struct({
+  id: UserId,
+  email: EmailAddress,
+  password: HashedPassword,
+  role: UserRole,
+  createdAt: S.optional(DateTime),
+  updatedAt: S.optional(DateTime),
+});
+
+/**
+ * Type derived from User Schema
+ */
+export type UserSchemaType = S.Schema.Type<typeof UserSchema>;
+
+/**
+ * UserPublic Schema (without password)
+ */
+export const UserPublicSchema = S.Struct({
+  id: UserId,
+  email: EmailAddress,
+  role: UserRole,
+  createdAt: S.optional(DateTime),
+  updatedAt: S.optional(DateTime),
+});
+
+/**
+ * Type derived from UserPublic Schema
+ */
+export type UserPublicSchemaType = S.Schema.Type<typeof UserPublicSchema>;
+
+// ============================================================================
+// Auth-Specific Schemas
+// ============================================================================
 
 /**
  * Login/Auth specific schemas
