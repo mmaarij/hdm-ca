@@ -9,12 +9,16 @@ import { Effect, Option, Context, Layer, pipe } from "effect";
 import { DocumentRepositoryTag } from "../../domain/document/repository";
 import { UserRepositoryTag } from "../../domain/user/repository";
 import { PermissionRepositoryTag } from "../../domain/permission/repository";
-import { DocumentNotFoundError } from "../../domain/document/errors";
+import {
+  DocumentNotFoundError,
+  DuplicateDocumentError,
+} from "../../domain/document/errors";
 import { NotFoundError, ForbiddenError } from "../../domain/shared/base.errors";
 import { InsufficientPermissionError } from "../utils/errors";
 import { withUseCaseLogging } from "../utils/logging";
 import { loadEntity, loadEntities } from "../utils/effect-helpers";
 import { Document, DocumentVersion } from "../../domain/document/entity";
+import { DocumentDomainServiceLive } from "../../domain/document/service";
 import {
   isAdmin,
   requireReadPermission,
@@ -182,17 +186,34 @@ export const DocumentWorkflowLive = Layer.effect(
                   })
                 )
               )
-            : Effect.succeed({
-                document: Document.create({
-                  filename: (command.file.name || "untitled") as any,
-                  originalName: (command.file.name || "untitled") as any,
-                  mimeType: (command.file.type ||
-                    "application/octet-stream") as any,
-                  size: command.file.size as any,
-                  uploadedBy: command.uploadedBy,
-                }),
-                isNewDocument: true,
-              }),
+            : pipe(
+                // Check for duplicate filename before creating new document
+                documentRepo.findByFilenameAndUser(
+                  (command.file.name || "untitled") as any,
+                  command.uploadedBy
+                ),
+                Effect.flatMap((existingDoc) =>
+                  Option.isSome(existingDoc)
+                    ? Effect.fail(
+                        new DuplicateDocumentError({
+                          message: `A document with filename '${command.file.name}' already exists`,
+                          checksum: "",
+                        })
+                      )
+                    : Effect.succeed({
+                        document: Document.create({
+                          filename: (command.file.name || "untitled") as any,
+                          originalName: (command.file.name ||
+                            "untitled") as any,
+                          mimeType: (command.file.type ||
+                            "application/octet-stream") as any,
+                          size: command.file.size as any,
+                          uploadedBy: command.uploadedBy,
+                        }),
+                        isNewDocument: true,
+                      })
+                )
+              ),
           // Create temporary version for storage
           Effect.map(({ document, isNewDocument }) => {
             const tempVersion = DocumentVersion.create({
@@ -222,6 +243,18 @@ export const DocumentWorkflowLive = Layer.effect(
               }))
             )
           ),
+          // Validate no duplicate content for existing documents
+          Effect.flatMap(({ document, isNewDocument, storedFile }) =>
+            !isNewDocument && storedFile.checksum
+              ? pipe(
+                  DocumentDomainServiceLive.validateNoDuplicateContent(
+                    document.versions,
+                    storedFile.checksum as any
+                  ),
+                  Effect.map(() => ({ document, isNewDocument, storedFile }))
+                )
+              : Effect.succeed({ document, isNewDocument, storedFile })
+          ),
           // Add version to document
           Effect.map(({ document, isNewDocument, storedFile }) => {
             const documentWithVersion = Document.addVersion(document, {
@@ -233,7 +266,7 @@ export const DocumentWorkflowLive = Layer.effect(
               uploadedBy: command.uploadedBy,
               path: storedFile.path as any,
               contentRef: storedFile.path as any,
-              checksum: undefined,
+              checksum: storedFile.checksum as any,
             });
             return { documentWithVersion, isNewDocument };
           }),

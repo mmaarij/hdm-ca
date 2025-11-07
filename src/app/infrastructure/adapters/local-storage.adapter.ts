@@ -89,6 +89,10 @@ const makeLocalStorage = (
       });
 
       const buffer = Buffer.from(arrayBuffer);
+
+      // Compute SHA-256 checksum
+      const checksum = crypto.createHash("sha256").update(buffer).digest("hex");
+
       yield* Effect.tryPromise({
         try: () => fs.writeFile(tempPath, buffer),
         catch: () =>
@@ -128,6 +132,7 @@ const makeLocalStorage = (
         originalName,
         mimeType,
         size,
+        checksum,
       };
     }),
 

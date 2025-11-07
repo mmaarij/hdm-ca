@@ -2,7 +2,7 @@ import { Effect, Option, Context } from "effect";
 import { Document, DocumentVersion, DocumentWithVersion } from "./entity";
 import { DocumentDomainError } from "./errors";
 import { DocumentId, UserId } from "../refined/uuid";
-import { Checksum, ContentRef } from "./value-object";
+import { Checksum, ContentRef, Filename } from "./value-object";
 import { PaginationParams, Paginated } from "../shared/pagination";
 
 /**
@@ -43,6 +43,15 @@ export interface DocumentRepository {
    */
   readonly findByContentRef: (
     contentRef: ContentRef
+  ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
+
+  /**
+   * Find document by filename and user (for duplicate check)
+   * Returns the parent document if found
+   */
+  readonly findByFilenameAndUser: (
+    filename: Filename,
+    userId: UserId
   ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
 
   /**

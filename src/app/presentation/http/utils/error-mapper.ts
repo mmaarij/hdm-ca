@@ -125,6 +125,12 @@ export const mapErrorToStatus = (
           message: error.message || "Document already exists",
           details: { documentId: error.documentId },
         };
+      case "DuplicateDocumentError":
+        return {
+          status: 409,
+          error: "Conflict",
+          message: error.message || "Duplicate document",
+        };
       case "PermissionAlreadyExistsError":
         return {
           status: 409,

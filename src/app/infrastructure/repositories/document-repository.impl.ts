@@ -1,5 +1,13 @@
 import { Effect, Option, Layer, pipe } from "effect";
-import { eq, desc, asc, like, or, count as drizzleCount } from "drizzle-orm";
+import {
+  eq,
+  desc,
+  asc,
+  like,
+  or,
+  and,
+  count as drizzleCount,
+} from "drizzle-orm";
 import {
   DocumentRepository,
   DocumentRepositoryTag,
@@ -241,6 +249,38 @@ export const DocumentRepositoryLive = Layer.effect(
           // Load the parent document with all versions
           return findById(versionRow.documentId as DocumentId);
         })
+      );
+
+    /**
+     * Find document by filename and user
+     * Used for duplicate filename detection
+     */
+    const findByFilenameAndUser: DocumentRepository["findByFilenameAndUser"] = (
+      filename,
+      userId
+    ) =>
+      pipe(
+        Effect.tryPromise({
+          try: () =>
+            db.query.documents.findFirst({
+              where: and(
+                eq(documents.filename, filename),
+                eq(documents.uploadedBy, userId)
+              ),
+              with: {
+                versions: {
+                  orderBy: [desc(documentVersions.versionNumber)],
+                },
+              },
+            }),
+          catch: () =>
+            new DocumentInfrastructureError({
+              message: "Database connection error",
+            }),
+        }),
+        Effect.map((row) =>
+          row ? Option.some(DocumentMapper.toDomain(row)) : Option.none()
+        )
       );
 
     /**
@@ -559,6 +599,7 @@ export const DocumentRepositoryLive = Layer.effect(
       findById,
       findByChecksum,
       findByContentRef,
+      findByFilenameAndUser,
       listByUser,
       listAll,
       search,

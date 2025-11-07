@@ -27,6 +27,7 @@ export interface StoredFileInfo {
   readonly originalName: string;
   readonly mimeType: string;
   readonly size: number;
+  readonly checksum: string; // SHA-256 hash of file content
 }
 
 /**
