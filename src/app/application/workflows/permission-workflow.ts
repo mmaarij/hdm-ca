@@ -1,27 +1,26 @@
 /**
- * Permission Workflow
+ * Permission Workflow - Functional Pattern
  *
- * Orchestrates permission-related use cases.
- * Handles permission CRUD with authorization checks.
+ * Functional workflows using currying pattern.
+ * No Effect.gen usage - pure monadic composition with pipe.
  */
 
-import { Effect, Option, Context, Layer, pipe } from "effect";
-import { PermissionRepositoryTag } from "../../domain/permission/repository";
-import { DocumentRepositoryTag } from "../../domain/document/repository";
-import { UserRepositoryTag } from "../../domain/user/repository";
+import { Effect, Option, pipe } from "effect";
+import type { PermissionRepository } from "../../domain/permission/repository";
+import type { DocumentRepository } from "../../domain/document/repository";
+import type { UserRepository } from "../../domain/user/repository";
 import { NotFoundError, ForbiddenError } from "../../domain/shared/base.errors";
 import {
   InsufficientPermissionError,
   CannotRevokeOwnerPermissionError,
 } from "../utils/errors";
-import { withUseCaseLogging } from "../utils/logging";
-import { loadEntity } from "../utils/effect-helpers";
 import {
   isAdmin,
   isDocumentOwner,
   requirePermission,
 } from "../../domain/permission/service";
-import { UserId, DocumentId } from "../../domain/refined/uuid";
+import { loadEntity } from "../utils/effect-helpers";
+import type { UserId, DocumentId } from "../../domain/refined/uuid";
 import {
   PermissionId,
   DocumentPermission,
@@ -42,492 +41,361 @@ import type {
 } from "../dtos/permission/response.dto";
 import { PermissionResponseMapper } from "../mappers/permission.mapper";
 
+// Re-export WorkflowTag from bootstrap for route compatibility
+export { PermissionWorkflowTag } from "../../bootstrap";
+
 /**
- * Permission Workflow Interface
+ * Dependencies for permission workflows
  */
-export interface PermissionWorkflow {
-  /**
-   * Grant permission to a user on a document
-   * Uses upsert logic: if permission exists, update it; otherwise create it
-   */
-  readonly grantPermission: (
-    command: GrantPermissionCommand
-  ) => Effect.Effect<
-    GrantPermissionResponse,
-    NotFoundError | ForbiddenError | Error
-  >;
-
-  /**
-   * Update an existing permission
-   */
-  readonly updatePermission: (
-    command: UpdatePermissionCommand
-  ) => Effect.Effect<
-    PermissionResponse,
-    NotFoundError | ForbiddenError | Error
-  >;
-
-  /**
-   * Revoke a permission
-   */
-  readonly revokePermission: (
-    command: RevokePermissionCommand
-  ) => Effect.Effect<
-    void,
-    NotFoundError | ForbiddenError | CannotRevokeOwnerPermissionError | Error
-  >;
-
-  /**
-   * List all permissions for a document
-   */
-  readonly listDocumentPermissions: (
-    query: ListDocumentPermissionsQuery
-  ) => Effect.Effect<
-    ListPermissionsResponse,
-    NotFoundError | ForbiddenError | Error
-  >;
-
-  /**
-   * List all permissions for a user
-   */
-  readonly listUserPermissions: (
-    query: ListUserPermissionsQuery
-  ) => Effect.Effect<ListPermissionsResponse, Error>;
-
-  /**
-   * Check if a user has a specific permission on a document
-   */
-  readonly checkPermission: (
-    query: CheckPermissionQuery
-  ) => Effect.Effect<CheckPermissionResponse, NotFoundError | Error>;
+export interface PermissionWorkflowDeps {
+  readonly permissionRepo: PermissionRepository;
+  readonly documentRepo: DocumentRepository;
+  readonly userRepo: UserRepository;
 }
 
-export const PermissionWorkflowTag = Context.GenericTag<PermissionWorkflow>(
-  "@app/PermissionWorkflow"
-);
+/**
+ * Grant permission to a user on a document
+ * Uses upsert logic: if permission exists, update it; otherwise create it
+ */
+export const grantPermission =
+  (deps: PermissionWorkflowDeps) =>
+  (
+    command: GrantPermissionCommand
+  ): Effect.Effect<
+    GrantPermissionResponse,
+    NotFoundError | ForbiddenError | Error
+  > =>
+    pipe(
+      Effect.all({
+        document: loadEntity(
+          deps.documentRepo.findById(command.documentId),
+          "Document",
+          command.documentId
+        ),
+        targetUser: loadEntity(
+          deps.userRepo.findById(command.userId),
+          "User",
+          command.userId
+        ),
+        grantingUser: loadEntity(
+          deps.userRepo.findById(command.grantedBy),
+          "User",
+          command.grantedBy
+        ),
+        existingPermissions: deps.permissionRepo.findByUserAndDocument(
+          command.userId,
+          command.documentId
+        ),
+      }),
+      Effect.flatMap(({ document, grantingUser, existingPermissions }) =>
+        isAdmin(grantingUser) || isDocumentOwner(document, grantingUser)
+          ? Effect.succeed({ document, existingPermissions })
+          : Effect.fail(
+              new ForbiddenError({
+                message: "Only document owner or admin can grant permissions",
+                resource: `Document:${command.documentId}`,
+              })
+            )
+      ),
+      Effect.flatMap(({ existingPermissions }) => {
+        if (existingPermissions.length > 0) {
+          const updatedPermission = DocumentPermission.updatePermission(
+            existingPermissions[0],
+            command.permission
+          );
+          return pipe(
+            deps.permissionRepo.save(updatedPermission),
+            Effect.map((permission) => ({
+              permission,
+              isNew: false,
+            }))
+          );
+        } else {
+          const newPermission = DocumentPermission.create({
+            documentId: command.documentId,
+            userId: command.userId,
+            permission: command.permission,
+            grantedBy: command.grantedBy,
+          });
+          return pipe(
+            deps.permissionRepo.save(newPermission),
+            Effect.map((permission) => ({
+              permission,
+              isNew: true,
+            }))
+          );
+        }
+      }),
+      Effect.tap(({ permission }) =>
+        deps.documentRepo.addAudit(
+          command.documentId,
+          "permission_granted",
+          command.grantedBy,
+          Option.some(
+            `${command.permission} permission granted to user ${command.userId}`
+          )
+        )
+      ),
+      Effect.map(({ permission, isNew }) =>
+        PermissionResponseMapper.toGrantPermissionResponse(permission, isNew)
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
 
 /**
- * Live implementation of PermissionWorkflow
+ * Update an existing permission
  */
-export const PermissionWorkflowLive = Layer.effect(
-  PermissionWorkflowTag,
-  Effect.gen(function* () {
-    const permissionRepo = yield* PermissionRepositoryTag;
-    const documentRepo = yield* DocumentRepositoryTag;
-    const userRepo = yield* UserRepositoryTag;
-
-    const grantPermission: PermissionWorkflow["grantPermission"] = (command) =>
-      withUseCaseLogging(
-        "GrantPermission",
+export const updatePermission =
+  (deps: PermissionWorkflowDeps) =>
+  (
+    command: UpdatePermissionCommand
+  ): Effect.Effect<
+    PermissionResponse,
+    NotFoundError | ForbiddenError | Error
+  > =>
+    pipe(
+      loadEntity(
+        deps.permissionRepo.findById(command.permissionId),
+        "Permission",
+        command.permissionId
+      ),
+      Effect.flatMap((permission) =>
         pipe(
-          // Load document, target user, granting user, and existing permissions in parallel
           Effect.all({
             document: loadEntity(
-              documentRepo.findById(command.documentId),
+              deps.documentRepo.findById(permission.documentId),
               "Document",
-              command.documentId
+              permission.documentId
             ),
-            targetUser: loadEntity(
-              userRepo.findById(command.userId),
+            updatingUser: loadEntity(
+              deps.userRepo.findById(command.updatedBy),
               "User",
-              command.userId
-            ),
-            grantingUser: loadEntity(
-              userRepo.findById(command.grantedBy),
-              "User",
-              command.grantedBy
-            ),
-            existingPermissions: permissionRepo.findByUserAndDocument(
-              command.userId,
-              command.documentId
+              command.updatedBy
             ),
           }),
-          Effect.mapError((e) =>
-            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
-          ),
-          // Check authorization
-          Effect.flatMap(
-            ({ document, grantingUser, existingPermissions, targetUser }) =>
-              isAdmin(grantingUser) || isDocumentOwner(document, grantingUser)
-                ? Effect.succeed({ document, existingPermissions })
-                : Effect.fail(
-                    new ForbiddenError({
-                      message:
-                        "Only document owner or admin can grant permissions",
-                      resource: `Document:${command.documentId}`,
-                    })
-                  )
-          ),
-          // Create or update permission (upsert logic)
-          Effect.flatMap(({ existingPermissions }) => {
-            if (existingPermissions.length > 0) {
-              const updatedPermission = DocumentPermission.updatePermission(
-                existingPermissions[0],
-                command.permission
-              );
-              return pipe(
-                permissionRepo.save(updatedPermission),
-                Effect.map((permission) => ({
-                  permission,
-                  isNew: false,
-                }))
-              );
-            } else {
-              const newPermission = DocumentPermission.create({
-                documentId: command.documentId,
-                userId: command.userId,
-                permission: command.permission,
-                grantedBy: command.grantedBy,
-              });
-              return pipe(
-                permissionRepo.save(newPermission),
-                Effect.map((permission) => ({
-                  permission,
-                  isNew: true,
-                }))
-              );
-            }
-          }),
-          // Add audit log
-          Effect.tap(({ permission }) =>
-            documentRepo.addAudit(
-              command.documentId,
-              "permission_granted",
-              command.grantedBy,
-              Option.some(
-                `${command.permission} permission granted to user ${command.userId}`
-              )
+          Effect.map(({ document, updatingUser }) => ({
+            permission,
+            document,
+            updatingUser,
+          }))
+        )
+      ),
+      Effect.flatMap(({ permission, document, updatingUser }) =>
+        isAdmin(updatingUser) || isDocumentOwner(document, updatingUser)
+          ? Effect.succeed(permission)
+          : Effect.fail(
+              new ForbiddenError({
+                message: "Only document owner or admin can update permissions",
+                resource: `Permission:${command.permissionId}`,
+              })
             )
-          ),
-          // Map to response
-          Effect.mapError((e) =>
-            e instanceof Error ? e : new Error(String(e))
-          ),
-          Effect.map(({ permission, isNew }) =>
-            PermissionResponseMapper.toGrantPermissionResponse(
-              permission,
-              isNew
-            )
-          )
-        ),
-        {
-          documentId: command.documentId,
-          userId: command.userId,
-          grantedBy: command.grantedBy,
-        }
-      );
-
-    const updatePermission: PermissionWorkflow["updatePermission"] = (
-      command
-    ) =>
-      withUseCaseLogging(
-        "UpdatePermission",
-        pipe(
-          // Load permission first
-          loadEntity(
-            permissionRepo.findById(command.permissionId),
-            "Permission",
-            command.permissionId
-          ),
-          Effect.mapError((e) =>
-            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
-          ),
-          // Load document and updating user in parallel
-          Effect.flatMap((permission) =>
-            pipe(
-              Effect.all({
-                document: loadEntity(
-                  documentRepo.findById(permission.documentId),
-                  "Document",
-                  permission.documentId
-                ),
-                updatingUser: loadEntity(
-                  userRepo.findById(command.updatedBy),
-                  "User",
-                  command.updatedBy
-                ),
-              }),
-              Effect.mapError((e) =>
-                "_tag" in e && e._tag === "NotFoundError"
-                  ? new NotFoundError(e)
-                  : e
-              ),
-              Effect.map(({ document, updatingUser }) => ({
-                permission,
-                document,
-                updatingUser,
-              }))
-            )
-          ),
-          // Check authorization
-          Effect.flatMap(({ permission, document, updatingUser }) =>
-            isAdmin(updatingUser) || isDocumentOwner(document, updatingUser)
-              ? Effect.succeed(permission)
-              : Effect.fail(
-                  new ForbiddenError({
-                    message:
-                      "Only document owner or admin can update permissions",
-                    resource: `Permission:${command.permissionId}`,
-                  })
-                )
-          ),
-          // Update and save permission
-          Effect.flatMap((permission) => {
-            const updatedPermission = DocumentPermission.updatePermission(
-              permission,
-              command.permission
-            );
-            return pipe(
-              permissionRepo.save(updatedPermission),
-              Effect.map((saved) => ({ saved, permission }))
-            );
-          }),
-          // Add audit log
-          Effect.tap(({ permission }) =>
-            documentRepo.addAudit(
-              permission.documentId,
-              "permission_updated",
-              command.updatedBy,
-              Option.some(
-                `Permission ${command.permissionId} updated to ${command.permission}`
-              )
-            )
-          ),
-          // Map to response
-          Effect.mapError((e) =>
-            e instanceof Error ? e : new Error(String(e))
-          ),
-          Effect.map(({ saved }) =>
-            PermissionResponseMapper.toPermissionResponse(saved)
-          )
-        ),
-        { permissionId: command.permissionId, updatedBy: command.updatedBy }
-      );
-
-    const revokePermission: PermissionWorkflow["revokePermission"] = (
-      command
-    ) =>
-      withUseCaseLogging(
-        "RevokePermission",
-        pipe(
-          // Load permission first
-          loadEntity(
-            permissionRepo.findById(command.permissionId),
-            "Permission",
-            command.permissionId
-          ),
-          Effect.mapError((e) =>
-            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
-          ),
-          // Load document and revoking user in parallel
-          Effect.flatMap((permission) =>
-            pipe(
-              Effect.all({
-                document: loadEntity(
-                  documentRepo.findById(permission.documentId),
-                  "Document",
-                  permission.documentId
-                ),
-                revokingUser: loadEntity(
-                  userRepo.findById(command.revokedBy),
-                  "User",
-                  command.revokedBy
-                ),
-              }),
-              Effect.mapError((e) =>
-                "_tag" in e && e._tag === "NotFoundError"
-                  ? new NotFoundError(e)
-                  : e
-              ),
-              Effect.map(({ document, revokingUser }) => ({
-                permission,
-                document,
-                revokingUser,
-              }))
-            )
-          ),
-          // Check if trying to revoke owner's permission
-          Effect.flatMap(({ permission, document, revokingUser }) =>
-            permission.userId === document.uploadedBy
-              ? Effect.fail(
-                  new CannotRevokeOwnerPermissionError({
-                    message: "Cannot revoke document owner's permission",
-                    documentId: permission.documentId,
-                  })
-                )
-              : Effect.succeed({ permission, document, revokingUser })
-          ),
-          // Check authorization
-          Effect.flatMap(({ permission, document, revokingUser }) =>
-            isAdmin(revokingUser) || isDocumentOwner(document, revokingUser)
-              ? Effect.succeed(permission)
-              : Effect.fail(
-                  new ForbiddenError({
-                    message:
-                      "Only document owner or admin can revoke permissions",
-                    resource: `Permission:${command.permissionId}`,
-                  })
-                )
-          ),
-          // Delete permission
-          Effect.flatMap((permission) =>
-            pipe(
-              permissionRepo.delete(command.permissionId),
-              Effect.map(() => permission)
-            )
-          ),
-          // Add audit log
-          Effect.flatMap((permission) =>
-            documentRepo.addAudit(
-              permission.documentId,
-              "permission_revoked",
-              command.revokedBy,
-              Option.some(
-                `Permission ${command.permissionId} revoked from user ${permission.userId}`
-              )
-            )
-          ),
-          // Map errors
-          Effect.mapError((e) =>
-            e instanceof Error ? e : new Error(String(e))
-          )
-        ),
-        { permissionId: command.permissionId, revokedBy: command.revokedBy }
-      );
-
-    const listDocumentPermissions: PermissionWorkflow["listDocumentPermissions"] =
-      (query) =>
-        withUseCaseLogging(
-          "ListDocumentPermissions",
-          pipe(
-            // Load document and user in parallel
-            Effect.all({
-              document: loadEntity(
-                documentRepo.findById(query.documentId),
-                "Document",
-                query.documentId
-              ),
-              user: loadEntity(
-                userRepo.findById(query.userId),
-                "User",
-                query.userId
-              ),
-            }),
-            Effect.mapError((e) =>
-              "_tag" in e && e._tag === "NotFoundError"
-                ? new NotFoundError(e)
-                : e
-            ),
-            // Check authorization
-            Effect.flatMap(({ document, user }) =>
-              isAdmin(user) || isDocumentOwner(document, user)
-                ? Effect.succeed(document)
-                : Effect.fail(
-                    new ForbiddenError({
-                      message:
-                        "Only document owner or admin can list permissions",
-                      resource: `Document:${query.documentId}`,
-                    })
-                  )
-            ),
-            // Get permissions
-            Effect.flatMap(() =>
-              permissionRepo.findByDocument(query.documentId)
-            ),
-            // Map to response
-            Effect.mapError((e) =>
-              e instanceof Error ? e : new Error(String(e))
-            ),
-            Effect.map((permissions) =>
-              PermissionResponseMapper.toListPermissionsResponse(permissions)
-            )
-          ),
-          { documentId: query.documentId, userId: query.userId }
+      ),
+      Effect.flatMap((permission) => {
+        const updatedPermission = DocumentPermission.updatePermission(
+          permission,
+          command.permission
         );
-
-    const listUserPermissions: PermissionWorkflow["listUserPermissions"] = (
-      query
-    ) =>
-      withUseCaseLogging(
-        "ListUserPermissions",
-        pipe(
-          // Get permissions for user
-          permissionRepo.findByUser(query.userId),
-          // Map to response
-          Effect.mapError((e) =>
-            e instanceof Error ? e : new Error(String(e))
-          ),
-          Effect.map((permissions) =>
-            PermissionResponseMapper.toListPermissionsResponse(permissions)
+        return pipe(
+          deps.permissionRepo.save(updatedPermission),
+          Effect.map((saved) => ({ saved, permission }))
+        );
+      }),
+      Effect.tap(({ permission }) =>
+        deps.documentRepo.addAudit(
+          permission.documentId,
+          "permission_updated",
+          command.updatedBy,
+          Option.some(
+            `Permission ${command.permissionId} updated to ${command.permission}`
           )
-        ),
-        { userId: query.userId }
-      );
+        )
+      ),
+      Effect.map(({ saved }) =>
+        PermissionResponseMapper.toPermissionResponse(saved)
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
 
-    const checkPermission: PermissionWorkflow["checkPermission"] = (query) =>
-      withUseCaseLogging(
-        "CheckPermission",
+/**
+ * Revoke a permission
+ */
+export const revokePermission =
+  (deps: PermissionWorkflowDeps) =>
+  (
+    command: RevokePermissionCommand
+  ): Effect.Effect<
+    void,
+    NotFoundError | ForbiddenError | CannotRevokeOwnerPermissionError | Error
+  > =>
+    pipe(
+      loadEntity(
+        deps.permissionRepo.findById(command.permissionId),
+        "Permission",
+        command.permissionId
+      ),
+      Effect.flatMap((permission) =>
         pipe(
-          // Load document and user in parallel
           Effect.all({
             document: loadEntity(
-              documentRepo.findById(query.documentId),
+              deps.documentRepo.findById(permission.documentId),
               "Document",
-              query.documentId
+              permission.documentId
             ),
-            user: loadEntity(
-              userRepo.findById(query.userId),
+            revokingUser: loadEntity(
+              deps.userRepo.findById(command.revokedBy),
               "User",
-              query.userId
+              command.revokedBy
             ),
-            permissions: permissionRepo.findByDocument(query.documentId),
           }),
-          Effect.mapError((e) =>
-            "_tag" in e && e._tag === "NotFoundError" ? new NotFoundError(e) : e
-          ),
-          // Check permission using domain service
-          Effect.flatMap(({ document, user, permissions }) =>
-            pipe(
-              requirePermission(
-                user,
-                document,
-                permissions,
-                query.requiredPermission
-              ),
-              Effect.map(() => ({ permissions, hasPermission: true })),
-              Effect.catchAll(() =>
-                Effect.succeed({ permissions, hasPermission: false })
-              )
+          Effect.map(({ document, revokingUser }) => ({
+            permission,
+            document,
+            revokingUser,
+          }))
+        )
+      ),
+      Effect.flatMap(({ permission, document, revokingUser }) =>
+        permission.userId === document.uploadedBy
+          ? Effect.fail(
+              new CannotRevokeOwnerPermissionError({
+                message: "Cannot revoke document owner's permission",
+                documentId: permission.documentId,
+              })
             )
-          ),
-          // Map to response
-          Effect.mapError((e) =>
-            e instanceof Error ? e : new Error(String(e))
-          ),
-          Effect.map(({ permissions, hasPermission }) => {
-            const userPermission = permissions.find(
-              (p) => p.userId === query.userId
-            );
-            return PermissionResponseMapper.toCheckPermissionResponse(
-              hasPermission,
-              userPermission?.permission
-            );
-          })
-        ),
-        {
-          documentId: query.documentId,
-          userId: query.userId,
-          requiredPermission: query.requiredPermission,
-        }
-      );
+          : Effect.succeed({ permission, document, revokingUser })
+      ),
+      Effect.flatMap(({ permission, document, revokingUser }) =>
+        isAdmin(revokingUser) || isDocumentOwner(document, revokingUser)
+          ? Effect.succeed(permission)
+          : Effect.fail(
+              new ForbiddenError({
+                message: "Only document owner or admin can revoke permissions",
+                resource: `Permission:${command.permissionId}`,
+              })
+            )
+      ),
+      Effect.flatMap((permission) =>
+        pipe(
+          deps.permissionRepo.delete(command.permissionId),
+          Effect.map(() => permission)
+        )
+      ),
+      Effect.flatMap((permission) =>
+        deps.documentRepo.addAudit(
+          permission.documentId,
+          "permission_revoked",
+          command.revokedBy,
+          Option.some(
+            `Permission ${command.permissionId} revoked from user ${permission.userId}`
+          )
+        )
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
 
-    return {
-      grantPermission,
-      updatePermission,
-      revokePermission,
-      listDocumentPermissions,
-      listUserPermissions,
-      checkPermission,
-    } satisfies PermissionWorkflow;
-  })
-);
+/**
+ * List all permissions for a document
+ */
+export const listDocumentPermissions =
+  (deps: PermissionWorkflowDeps) =>
+  (
+    query: ListDocumentPermissionsQuery
+  ): Effect.Effect<
+    ListPermissionsResponse,
+    NotFoundError | ForbiddenError | Error
+  > =>
+    pipe(
+      Effect.all({
+        document: loadEntity(
+          deps.documentRepo.findById(query.documentId),
+          "Document",
+          query.documentId
+        ),
+        user: loadEntity(
+          deps.userRepo.findById(query.userId),
+          "User",
+          query.userId
+        ),
+      }),
+      Effect.flatMap(({ document, user }) =>
+        isAdmin(user) || isDocumentOwner(document, user)
+          ? Effect.succeed(document)
+          : Effect.fail(
+              new ForbiddenError({
+                message: "Only document owner or admin can list permissions",
+                resource: `Document:${query.documentId}`,
+              })
+            )
+      ),
+      Effect.flatMap(() =>
+        deps.permissionRepo.findByDocument(query.documentId)
+      ),
+      Effect.map((permissions) =>
+        PermissionResponseMapper.toListPermissionsResponse(permissions)
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
+
+/**
+ * List all permissions for a user
+ */
+export const listUserPermissions =
+  (deps: PermissionWorkflowDeps) =>
+  (
+    query: ListUserPermissionsQuery
+  ): Effect.Effect<ListPermissionsResponse, Error> =>
+    pipe(
+      deps.permissionRepo.findByUser(query.userId),
+      Effect.map((permissions) =>
+        PermissionResponseMapper.toListPermissionsResponse(permissions)
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
+
+/**
+ * Check if a user has a specific permission on a document
+ */
+export const checkPermission =
+  (deps: PermissionWorkflowDeps) =>
+  (
+    query: CheckPermissionQuery
+  ): Effect.Effect<CheckPermissionResponse, NotFoundError | Error> =>
+    pipe(
+      Effect.all({
+        document: loadEntity(
+          deps.documentRepo.findById(query.documentId),
+          "Document",
+          query.documentId
+        ),
+        user: loadEntity(
+          deps.userRepo.findById(query.userId),
+          "User",
+          query.userId
+        ),
+        permissions: deps.permissionRepo.findByDocument(query.documentId),
+      }),
+      Effect.flatMap(({ document, user, permissions }) =>
+        pipe(
+          requirePermission(
+            user,
+            document,
+            permissions,
+            query.requiredPermission
+          ),
+          Effect.map(() => ({ permissions, hasPermission: true })),
+          Effect.catchAll(() =>
+            Effect.succeed({ permissions, hasPermission: false })
+          )
+        )
+      ),
+      Effect.map(({ permissions, hasPermission }) => {
+        const userPermission = permissions.find(
+          (p) => p.userId === query.userId
+        );
+        return PermissionResponseMapper.toCheckPermissionResponse(
+          hasPermission,
+          userPermission?.permission
+        );
+      }),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );

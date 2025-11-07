@@ -1,14 +1,15 @@
 /**
- * Download Token Workflow
+ * Download Token Workflow - Functional Pattern
  *
- * Orchestrates download token and file download operations.
+ * Functional workflows using currying pattern.
+ * No Effect.gen usage - pure monadic composition with pipe.
  */
 
-import { Effect, Option, Context, Layer, pipe } from "effect";
-import { DownloadTokenRepositoryTag } from "../../domain/download-token/repository";
-import { DocumentRepositoryTag } from "../../domain/document/repository";
-import { UserRepositoryTag } from "../../domain/user/repository";
-import { PermissionRepositoryTag } from "../../domain/permission/repository";
+import { Effect, Option, pipe } from "effect";
+import type { DownloadTokenRepository } from "../../domain/download-token/repository";
+import type { DocumentRepository } from "../../domain/document/repository";
+import type { UserRepository } from "../../domain/user/repository";
+import type { PermissionRepository } from "../../domain/permission/repository";
 import { NotFoundError, ForbiddenError } from "../../domain/shared/base.errors";
 import {
   InsufficientPermissionError,
@@ -16,14 +17,13 @@ import {
   DownloadTokenNotFoundError,
   DownloadTokenAlreadyUsedError,
 } from "../utils/errors";
-import { withUseCaseLogging } from "../utils/logging";
-import { loadEntity } from "../utils/effect-helpers";
 import {
   isAdmin,
   requireReadPermission,
 } from "../../domain/permission/service";
-import { UserId, DocumentId } from "../../domain/refined/uuid";
-import { Token } from "../../domain/download-token/value-object";
+import { loadEntity } from "../utils/effect-helpers";
+import type { UserId, DocumentId } from "../../domain/refined/uuid";
+import type { Token } from "../../domain/download-token/value-object";
 import { DownloadToken } from "../../domain/download-token/entity";
 import { Document } from "../../domain/document/entity";
 import { DownloadTokenResponseMapper } from "../mappers/download-token.mapper";
@@ -40,359 +40,285 @@ import type {
   CleanupTokensResponse,
 } from "../dtos/download-token/response.dto";
 
+// Re-export WorkflowTag from bootstrap for route compatibility
+export { DownloadTokenWorkflowTag } from "../../bootstrap";
+
 /**
- * Download Token Workflow Interface
+ * Dependencies for download token workflows
  */
-export interface DownloadTokenWorkflow {
-  /**
-   * Generate a download link for a document
-   */
-  readonly generateDownloadLink: (
+export interface DownloadTokenWorkflowDeps {
+  readonly tokenRepo: DownloadTokenRepository;
+  readonly documentRepo: DocumentRepository;
+  readonly userRepo: UserRepository;
+  readonly permissionRepo: PermissionRepository;
+}
+
+/**
+ * Generate a download link for a document
+ */
+export const generateDownloadLink =
+  (deps: DownloadTokenWorkflowDeps) =>
+  (
     command: GenerateDownloadLinkCommand,
     baseUrl: string
-  ) => Effect.Effect<
+  ): Effect.Effect<
     DownloadLinkResponse,
     NotFoundError | InsufficientPermissionError | Error
-  >;
+  > =>
+    pipe(
+      loadEntity(
+        deps.documentRepo.findById(command.documentId),
+        "Document",
+        command.documentId
+      ),
+      Effect.flatMap((document) =>
+        pipe(
+          Effect.all({
+            user: loadEntity(
+              deps.userRepo.findById(command.userId),
+              "User",
+              command.userId
+            ),
+            permissions: deps.permissionRepo.findByDocument(command.documentId),
+          }),
+          Effect.map(({ user, permissions }) => ({
+            document,
+            user,
+            permissions,
+          }))
+        )
+      ),
+      Effect.flatMap(({ document, user, permissions }) =>
+        pipe(
+          requireReadPermission(user, document, permissions),
+          Effect.map(() => ({ document, user }))
+        )
+      ),
+      Effect.flatMap(({ document, user }) => {
+        const versionId =
+          command.versionId ??
+          pipe(
+            Document.getLatestVersion(document),
+            Option.match({
+              onNone: () => undefined as any,
+              onSome: (version) => version.id,
+            })
+          );
 
-  /**
-   * Validate a download token
-   */
-  readonly validateToken: (
+        if (!versionId) {
+          return Effect.fail(
+            new NotFoundError({
+              entityType: "DocumentVersion",
+              id: command.documentId,
+              message: `No versions found for document ${command.documentId}`,
+            })
+          );
+        }
+
+        return Effect.succeed({ document, user, versionId });
+      }),
+      Effect.flatMap(({ document, user, versionId }) => {
+        const ttlMs = command.ttlMs ?? 5 * 60 * 1000;
+        const expiresInHours = ttlMs / (60 * 60 * 1000);
+
+        const newToken = DownloadToken.create({
+          documentId: command.documentId,
+          versionId,
+          createdBy: command.userId,
+          expiresInHours,
+        });
+
+        return pipe(
+          deps.tokenRepo.save(newToken),
+          Effect.map((token) => ({ token, versionId }))
+        );
+      }),
+      Effect.tap(({ token }) =>
+        deps.documentRepo.addAudit(
+          command.documentId,
+          "download_link_generated",
+          command.userId,
+          Option.some(
+            `Download link generated, expires at ${token.expiresAt.toISOString()}`
+          )
+        )
+      ),
+      Effect.map(({ token }) =>
+        DownloadTokenResponseMapper.toDownloadLinkResponse(token, baseUrl)
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
+
+/**
+ * Validate a download token
+ */
+export const validateToken =
+  (deps: DownloadTokenWorkflowDeps) =>
+  (
     query: ValidateDownloadTokenQuery
-  ) => Effect.Effect<ValidateTokenResponse, Error>;
+  ): Effect.Effect<ValidateTokenResponse, Error> =>
+    pipe(
+      deps.tokenRepo.findByToken(query.token),
+      Effect.map(
+        Option.match({
+          onNone: () =>
+            DownloadTokenResponseMapper.toValidateTokenResponse(false),
+          onSome: (token: DownloadToken) =>
+            DownloadToken.isExpired(token) || DownloadToken.isUsed(token)
+              ? DownloadTokenResponseMapper.toValidateTokenResponse(false)
+              : DownloadTokenResponseMapper.toValidateTokenResponse(
+                  true,
+                  token
+                ),
+        })
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
 
-  /**
-   * Download file using token
-   */
-  readonly downloadFile: (
+/**
+ * Download file using token
+ */
+export const downloadFile =
+  (deps: DownloadTokenWorkflowDeps) =>
+  (
     query: DownloadFileQuery
-  ) => Effect.Effect<
+  ): Effect.Effect<
     DownloadFileResponse,
     | DownloadTokenNotFoundError
     | DownloadTokenExpiredError
     | DownloadTokenAlreadyUsedError
     | NotFoundError
     | Error
-  >;
-
-  /**
-   * Cleanup expired tokens (admin only)
-   */
-  readonly cleanupExpiredTokens: (
-    command: CleanupExpiredTokensCommand
-  ) => Effect.Effect<CleanupTokensResponse, ForbiddenError | Error>;
-}
-
-export const DownloadTokenWorkflowTag =
-  Context.GenericTag<DownloadTokenWorkflow>("@app/DownloadTokenWorkflow");
-
-/**
- * Live implementation of DownloadTokenWorkflow
- */
-export const DownloadTokenWorkflowLive = Layer.effect(
-  DownloadTokenWorkflowTag,
-  Effect.gen(function* () {
-    const tokenRepo = yield* DownloadTokenRepositoryTag;
-    const documentRepo = yield* DocumentRepositoryTag;
-    const userRepo = yield* UserRepositoryTag;
-    const permissionRepo = yield* PermissionRepositoryTag;
-
-    const generateDownloadLink: DownloadTokenWorkflow["generateDownloadLink"] =
-      (command, baseUrl) =>
-        withUseCaseLogging(
-          "GenerateDownloadLink",
-          pipe(
-            // Load document
-            loadEntity(
-              documentRepo.findById(command.documentId),
-              "Document",
-              command.documentId
+  > =>
+    pipe(
+      deps.tokenRepo.findByToken(query.token),
+      Effect.flatMap(
+        Option.match({
+          onNone: () =>
+            Effect.fail(
+              new DownloadTokenNotFoundError({
+                message: "Download token not found or invalid",
+                token: query.token,
+              })
             ),
-            Effect.mapError((e) =>
-              "_tag" in e && e._tag === "NotFoundError"
-                ? new NotFoundError(e)
-                : e
-            ),
-            // Load user and permissions in parallel
-            Effect.flatMap((document) =>
-              pipe(
-                Effect.all({
-                  user: loadEntity(
-                    userRepo.findById(command.userId),
-                    "User",
-                    command.userId
-                  ),
-                  permissions: permissionRepo.findByDocument(
-                    command.documentId
-                  ),
-                }),
-                Effect.mapError((e) =>
-                  "_tag" in e && e._tag === "NotFoundError"
-                    ? new NotFoundError(e)
-                    : e
-                ),
-                Effect.map(({ user, permissions }) => ({
-                  document,
-                  user,
-                  permissions,
-                }))
-              )
-            ),
-            // Check read permission
-            Effect.flatMap(({ document, user, permissions }) =>
-              pipe(
-                requireReadPermission(user, document, permissions),
-                Effect.map(() => ({ document, user }))
-              )
-            ),
-            // Get version ID
-            Effect.flatMap(({ document, user }) => {
-              const versionId =
-                command.versionId ??
-                pipe(
-                  Document.getLatestVersion(document),
-                  Option.match({
-                    onNone: () => undefined as any,
-                    onSome: (version) => version.id,
-                  })
-                );
-
-              if (!versionId) {
-                return Effect.fail(
-                  new NotFoundError({
-                    entityType: "DocumentVersion",
-                    id: command.documentId,
-                    message: `No versions found for document ${command.documentId}`,
-                  })
-                );
-              }
-
-              return Effect.succeed({ document, user, versionId });
-            }),
-            // Create and save token
-            Effect.flatMap(({ document, user, versionId }) => {
-              const ttlMs = command.ttlMs ?? 5 * 60 * 1000;
-              const expiresInHours = ttlMs / (60 * 60 * 1000);
-
-              const newToken = DownloadToken.create({
-                documentId: command.documentId,
-                versionId,
-                createdBy: command.userId,
-                expiresInHours,
-              });
-
-              return pipe(
-                tokenRepo.save(newToken),
-                Effect.map((token) => ({ token, versionId }))
-              );
-            }),
-            // Add audit log
-            Effect.tap(({ token }) =>
-              documentRepo.addAudit(
-                command.documentId,
-                "download_link_generated",
-                command.userId,
-                Option.some(
-                  `Download link generated, expires at ${token.expiresAt.toISOString()}`
-                )
-              )
-            ),
-            // Map to response
-            Effect.mapError((e) =>
-              e instanceof Error ? e : new Error(String(e))
-            ),
-            Effect.map(({ token }) =>
-              DownloadTokenResponseMapper.toDownloadLinkResponse(token, baseUrl)
+          onSome: (token: DownloadToken) => Effect.succeed(token),
+        })
+      ),
+      Effect.flatMap((token) =>
+        DownloadToken.isExpired(token)
+          ? Effect.fail(
+              new DownloadTokenExpiredError({
+                message: "Download token has expired",
+                token: query.token,
+                expiresAt: token.expiresAt,
+              })
             )
+          : Effect.succeed(token)
+      ),
+      Effect.flatMap((token) =>
+        DownloadToken.isUsed(token)
+          ? Effect.fail(
+              new DownloadTokenAlreadyUsedError({
+                message: "Download token has already been used",
+                token: query.token,
+                usedAt: Option.isSome(token.usedAt)
+                  ? token.usedAt.value
+                  : new Date(),
+              })
+            )
+          : Effect.succeed(token)
+      ),
+      Effect.flatMap((token) =>
+        pipe(
+          loadEntity(
+            deps.documentRepo.findById(token.documentId),
+            "Document",
+            token.documentId
           ),
-          { documentId: command.documentId, userId: command.userId }
-        );
-
-    const validateToken: DownloadTokenWorkflow["validateToken"] = (query) =>
-      withUseCaseLogging(
-        "ValidateToken",
-        pipe(
-          tokenRepo.findByToken(query.token),
-          Effect.map(
-            Option.match({
-              onNone: () =>
-                DownloadTokenResponseMapper.toValidateTokenResponse(false),
-              onSome: (token: DownloadToken) =>
-                DownloadToken.isExpired(token) || DownloadToken.isUsed(token)
-                  ? DownloadTokenResponseMapper.toValidateTokenResponse(false)
-                  : DownloadTokenResponseMapper.toValidateTokenResponse(
-                      true,
-                      token
-                    ),
-            })
-          )
-        ),
-        { token: query.token }
-      );
-
-    const downloadFile: DownloadTokenWorkflow["downloadFile"] = (query) =>
-      withUseCaseLogging(
-        "DownloadFile",
-        pipe(
-          // Find token
-          tokenRepo.findByToken(query.token),
-          Effect.flatMap(
+          Effect.map((document) => ({ token, document }))
+        )
+      ),
+      Effect.flatMap(({ token, document }) => {
+        if (Option.isSome(token.versionId)) {
+          const versionId = token.versionId.value;
+          const version = document.versions.find((v) => v.id === versionId);
+          if (!version) {
+            return Effect.fail(
+              new NotFoundError({
+                entityType: "DocumentVersion",
+                id: versionId,
+                message: `Document version not found`,
+              })
+            );
+          }
+          return Effect.succeed({ token, document, version });
+        } else {
+          return pipe(
+            Document.getLatestVersion(document),
             Option.match({
               onNone: () =>
                 Effect.fail(
-                  new DownloadTokenNotFoundError({
-                    message: "Download token not found or invalid",
-                    token: query.token,
-                  })
-                ),
-              onSome: (token: DownloadToken) => Effect.succeed(token),
-            })
-          ),
-          // Check if expired
-          Effect.flatMap((token) =>
-            DownloadToken.isExpired(token)
-              ? Effect.fail(
-                  new DownloadTokenExpiredError({
-                    message: "Download token has expired",
-                    token: query.token,
-                    expiresAt: token.expiresAt,
-                  })
-                )
-              : Effect.succeed(token)
-          ),
-          // Check if already used
-          Effect.flatMap((token) =>
-            DownloadToken.isUsed(token)
-              ? Effect.fail(
-                  new DownloadTokenAlreadyUsedError({
-                    message: "Download token has already been used",
-                    token: query.token,
-                    usedAt: Option.isSome(token.usedAt)
-                      ? token.usedAt.value
-                      : new Date(),
-                  })
-                )
-              : Effect.succeed(token)
-          ),
-          // Load document
-          Effect.flatMap((token) =>
-            pipe(
-              loadEntity(
-                documentRepo.findById(token.documentId),
-                "Document",
-                token.documentId
-              ),
-              Effect.map((document) => ({ token, document }))
-            )
-          ),
-          // Get version
-          Effect.flatMap(({ token, document }) => {
-            if (Option.isSome(token.versionId)) {
-              const versionId = token.versionId.value;
-              const version = document.versions.find((v) => v.id === versionId);
-              if (!version) {
-                return Effect.fail(
                   new NotFoundError({
                     entityType: "DocumentVersion",
-                    id: versionId,
-                    message: `Document version not found`,
+                    id: token.documentId,
+                    message: `No versions found for document`,
                   })
-                );
-              }
-              return Effect.succeed({ token, document, version });
-            } else {
-              return pipe(
-                Document.getLatestVersion(document),
-                Option.match({
-                  onNone: () =>
-                    Effect.fail(
-                      new NotFoundError({
-                        entityType: "DocumentVersion",
-                        id: token.documentId,
-                        message: `No versions found for document`,
-                      })
-                    ),
-                  onSome: (version) =>
-                    Effect.succeed({ token, document, version }),
-                })
-              );
-            }
-          }),
-          // Mark token as used
-          Effect.flatMap(({ token, document, version }) =>
-            pipe(
-              tokenRepo.save(DownloadToken.markAsUsed(token)),
-              Effect.map(() => ({ token, document, version }))
-            )
-          ),
-          // Add audit log
-          Effect.tap(({ token }) =>
-            documentRepo.addAudit(
-              token.documentId,
-              "downloaded",
-              token.createdBy,
-              Option.some(`Document downloaded via token`)
-            )
-          ),
-          // Map to response
-          Effect.mapError((e) =>
-            e instanceof Error ? e : new Error(String(e))
-          ),
-          Effect.map(({ version }) =>
-            DownloadTokenResponseMapper.toDownloadFileResponse(version)
-          )
-        ),
-        { token: query.token }
-      );
+                ),
+              onSome: (version) => Effect.succeed({ token, document, version }),
+            })
+          );
+        }
+      }),
+      Effect.flatMap(({ token, document, version }) =>
+        pipe(
+          deps.tokenRepo.save(DownloadToken.markAsUsed(token)),
+          Effect.map(() => ({ token, document, version }))
+        )
+      ),
+      Effect.tap(({ token }) =>
+        deps.documentRepo.addAudit(
+          token.documentId,
+          "downloaded",
+          token.createdBy,
+          Option.some(`Document downloaded via token`)
+        )
+      ),
+      Effect.map(({ version }) =>
+        DownloadTokenResponseMapper.toDownloadFileResponse(version)
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
 
-    const cleanupExpiredTokens: DownloadTokenWorkflow["cleanupExpiredTokens"] =
-      (command) =>
-        withUseCaseLogging(
-          "CleanupExpiredTokens",
-          pipe(
-            // Load user
-            loadEntity(
-              userRepo.findById(command.userId),
-              "User",
-              command.userId
-            ),
-            // Map NotFoundError to Error for type compatibility
-            Effect.mapError((e) =>
-              "_tag" in e && e._tag === "NotFoundError"
-                ? new Error(e.message)
-                : e
-            ),
-            // Check admin permission
-            Effect.flatMap((user) =>
-              isAdmin(user)
-                ? Effect.succeed(user)
-                : Effect.fail(
-                    new ForbiddenError({
-                      message: "Only admins can cleanup expired tokens",
-                      resource: "DownloadTokens",
-                    })
-                  )
-            ),
-            // Delete expired tokens
-            Effect.flatMap(() => tokenRepo.deleteExpired()),
-            // Map repository errors to Error
-            Effect.mapError((e) =>
-              e instanceof Error ? e : new Error(String(e))
-            ),
-            // Map to response
-            Effect.map((deletedCount) =>
-              DownloadTokenResponseMapper.toCleanupTokensResponse(deletedCount)
+/**
+ * Cleanup expired tokens (admin only)
+ */
+export const cleanupExpiredTokens =
+  (deps: DownloadTokenWorkflowDeps) =>
+  (
+    command: CleanupExpiredTokensCommand
+  ): Effect.Effect<CleanupTokensResponse, ForbiddenError | Error> =>
+    pipe(
+      loadEntity(
+        deps.userRepo.findById(command.userId),
+        "User",
+        command.userId
+      ),
+      Effect.mapError((e) =>
+        "_tag" in e && e._tag === "NotFoundError" ? new Error(e.message) : e
+      ),
+      Effect.flatMap((user) =>
+        isAdmin(user)
+          ? Effect.succeed(user)
+          : Effect.fail(
+              new ForbiddenError({
+                message: "Only admins can cleanup expired tokens",
+                resource: "DownloadTokens",
+              })
             )
-          ),
-          { userId: command.userId }
-        );
-
-    return {
-      generateDownloadLink,
-      validateToken,
-      downloadFile,
-      cleanupExpiredTokens,
-    } satisfies DownloadTokenWorkflow;
-  })
-);
+      ),
+      Effect.flatMap(() => deps.tokenRepo.deleteExpired()),
+      Effect.map((deletedCount) =>
+        DownloadTokenResponseMapper.toCleanupTokensResponse(deletedCount)
+      ),
+      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+    );
