@@ -1,5 +1,5 @@
 import { Effect, Option, Context } from "effect";
-import { User } from "./entity";
+import { UserEntity as User } from "./entity";
 import { UserDomainError } from "./errors";
 import { UserId } from "../refined/uuid";
 import { EmailAddress } from "../refined/email";

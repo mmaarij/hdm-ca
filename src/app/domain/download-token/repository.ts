@@ -1,5 +1,5 @@
 import { Effect, Option, Context } from "effect";
-import { DownloadToken } from "./entity";
+import { DownloadTokenEntity as DownloadToken } from "./entity";
 import { DownloadTokenDomainError } from "./errors";
 import { DownloadTokenId, DocumentId } from "../refined/uuid";
 import { Token } from "./value-object";

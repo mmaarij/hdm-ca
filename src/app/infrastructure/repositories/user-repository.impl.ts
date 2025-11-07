@@ -4,7 +4,7 @@ import {
   UserRepository,
   UserRepositoryTag,
 } from "../../domain/user/repository";
-import { User } from "../../domain/user/entity";
+import { UserEntity as User } from "../../domain/user/entity";
 import {
   UserNotFoundError,
   UserAlreadyExistsError,

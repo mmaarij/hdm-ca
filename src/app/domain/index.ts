@@ -32,7 +32,6 @@ export {
 } from "./document/value-object";
 export * from "./document/schema";
 export * from "./document/errors";
-export * from "./document/aggregate";
 export * from "./document/service";
 export {
   isDocumentOwner,

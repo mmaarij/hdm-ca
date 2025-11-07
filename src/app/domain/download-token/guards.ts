@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import { DownloadToken } from "./entity";
+import { DownloadTokenEntity as DownloadToken } from "./entity";
 import { isTokenExpired, isTokenUsed } from "./value-object";
 import {
   DownloadTokenExpiredError,

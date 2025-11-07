@@ -5,7 +5,7 @@ import {
   PermissionRepositoryTag,
 } from "../../domain/permission/repository";
 import {
-  DocumentPermission,
+  DocumentPermissionEntity as DocumentPermission,
   PermissionId,
 } from "../../domain/permission/entity";
 import {

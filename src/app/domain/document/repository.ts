@@ -1,5 +1,9 @@
 import { Effect, Option, Context } from "effect";
-import { Document, DocumentVersion, DocumentWithVersion } from "./entity";
+import {
+  DocumentEntity,
+  DocumentVersionEntity,
+  DocumentWithVersion,
+} from "./entity";
 import { DocumentDomainError } from "./errors";
 import { DocumentId, UserId } from "../refined/uuid";
 import { Checksum, ContentRef, Filename } from "./value-object";
@@ -19,15 +23,15 @@ export interface DocumentRepository {
    * Save a document (creates or updates the aggregate including all versions)
    */
   readonly save: (
-    document: Document
-  ) => Effect.Effect<Document, DocumentDomainError>;
+    document: DocumentEntity
+  ) => Effect.Effect<DocumentEntity, DocumentDomainError>;
 
   /**
    * Find document by ID (loads the aggregate)
    */
   readonly findById: (
     id: DocumentId
-  ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
+  ) => Effect.Effect<Option.Option<DocumentEntity>, DocumentDomainError>;
 
   /**
    * Find document by version checksum (for idempotency checks)
@@ -35,7 +39,7 @@ export interface DocumentRepository {
    */
   readonly findByChecksum: (
     checksum: Checksum
-  ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
+  ) => Effect.Effect<Option.Option<DocumentEntity>, DocumentDomainError>;
 
   /**
    * Find document by content reference
@@ -43,7 +47,7 @@ export interface DocumentRepository {
    */
   readonly findByContentRef: (
     contentRef: ContentRef
-  ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
+  ) => Effect.Effect<Option.Option<DocumentEntity>, DocumentDomainError>;
 
   /**
    * Find document by filename and user (for duplicate check)
@@ -52,7 +56,7 @@ export interface DocumentRepository {
   readonly findByFilenameAndUser: (
     filename: Filename,
     userId: UserId
-  ) => Effect.Effect<Option.Option<Document>, DocumentDomainError>;
+  ) => Effect.Effect<Option.Option<DocumentEntity>, DocumentDomainError>;
 
   /**
    * List documents by user with pagination
@@ -76,7 +80,7 @@ export interface DocumentRepository {
   readonly search: (
     query: string,
     pagination: PaginationParams
-  ) => Effect.Effect<Paginated<Document>, DocumentDomainError>;
+  ) => Effect.Effect<Paginated<DocumentEntity>, DocumentDomainError>;
 
   /**
    * Delete document (and all its versions)

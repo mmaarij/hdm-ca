@@ -6,8 +6,9 @@
  */
 
 import { Effect, Option, pipe } from "effect";
+import { v4 as uuidv4 } from "uuid";
 import type { UserRepository } from "../../domain/user/repository";
-import { User } from "../../domain/user/entity";
+import { UserEntity as User } from "../../domain/user/entity";
 import {
   UserNotFoundError,
   UserAlreadyExistsError,
@@ -72,12 +73,18 @@ export const registerUser =
       Effect.flatMap(() => makePassword(command.password)),
       Effect.flatMap((password) => deps.passwordHasher.hash(password)),
       Effect.flatMap((hashedPassword) => {
-        const newUser = User.create({
-          email: command.email,
-          password: hashedPassword as HashedPassword,
-          role: command.role,
-        });
-        return deps.userRepo.save(newUser);
+        const now = new Date().toISOString();
+        return pipe(
+          User.create({
+            id: uuidv4() as any,
+            email: command.email,
+            password: hashedPassword as HashedPassword,
+            role: command.role ?? ("USER" as any),
+            createdAt: now as any,
+            updatedAt: now as any,
+          }),
+          Effect.flatMap((newUser) => deps.userRepo.save(newUser))
+        );
       }),
       Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e)))),
       Effect.map((user) => UserResponseMapper.toRegisterResponse(user))
@@ -230,7 +237,7 @@ export const updateUserProfile =
             })
       ),
       Effect.flatMap(({ user, updates }) => {
-        const updatedUser = User.update(user, updates);
+        const updatedUser = user.update(updates);
         return deps.userRepo.save(updatedUser);
       }),
       Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e)))),

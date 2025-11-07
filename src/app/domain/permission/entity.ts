@@ -12,6 +12,9 @@ import {
 import { PermissionValidationError } from "./errors";
 import { PermissionId, DocumentPermissionSchema } from "./schema";
 
+// Re-export PermissionId for convenience (both type and value)
+export { PermissionId };
+
 // ============================================================================
 // Serialized Types
 // ============================================================================
@@ -104,46 +107,3 @@ export class DocumentPermissionEntity extends BaseEntity implements IEntity {
     };
   }
 }
-
-// ============================================================================
-// Legacy Type Aliases and Factory Functions (for backward compatibility)
-// ============================================================================
-
-/**
- * Legacy DocumentPermission type alias
- * @deprecated Use DocumentPermissionEntity instead
- */
-export type DocumentPermission = DocumentPermissionEntity;
-
-/**
- * Legacy DocumentPermission factory functions
- * @deprecated Use DocumentPermissionEntity methods instead
- */
-export const DocumentPermission = {
-  /**
-   * Create a new permission
-   */
-  create: (props: {
-    documentId: DocumentId;
-    userId: UserId;
-    permission: PermissionType;
-    grantedBy: UserId;
-  }): DocumentPermissionEntity => {
-    return new DocumentPermissionEntity(
-      uuidv4() as PermissionId,
-      props.documentId,
-      props.userId,
-      props.permission,
-      props.grantedBy,
-      new Date()
-    );
-  },
-
-  /**
-   * Update permission level
-   */
-  updatePermission: (
-    permission: DocumentPermissionEntity,
-    newPermissionType: PermissionType
-  ): DocumentPermissionEntity => permission.updatePermission(newPermissionType),
-};

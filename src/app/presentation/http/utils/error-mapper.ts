@@ -25,6 +25,49 @@ import type {
 import type { ParseError } from "effect/ParseResult";
 
 /**
+ * Sanitize validation error messages from Effect Schema
+ * Extracts human-readable messages from verbose schema error trees
+ */
+function sanitizeValidationError(message: string): string {
+  // Extract the main error message before the schema tree
+  const prefixMatch = message.match(/^(.*?)(?=\n└─|$)/);
+  if (prefixMatch) {
+    const prefix = prefixMatch[1].trim();
+
+    // Try to extract the actual validation error from the tree
+    const actualErrorMatch = message.match(
+      /└─ (Expected .+?, actual .+?)(?=\n|$)/
+    );
+    if (actualErrorMatch) {
+      return `${prefix.replace(
+        "User validation failed: ",
+        "Validation failed: "
+      )} - ${actualErrorMatch[1]}`;
+    }
+
+    // Try to find field-specific errors
+    const fieldErrorMatch = message.match(
+      /\["(.+?)"\][\s\S]*?└─ (Expected .+?, actual .+?)(?=\n|$)/
+    );
+    if (fieldErrorMatch) {
+      return `Invalid value for field "${fieldErrorMatch[1]}": ${fieldErrorMatch[2]}`;
+    }
+
+    // If no specific pattern found, return a cleaned up prefix
+    return prefix
+      .replace(/User validation failed: .*/, "User validation failed")
+      .replace(/Document validation failed: .*/, "Document validation failed")
+      .replace(
+        /Permission validation failed: .*/,
+        "Permission validation failed"
+      )
+      .replace(/Metadata validation failed: .*/, "Metadata validation failed");
+  }
+
+  return "Validation failed";
+}
+
+/**
  * HTTP Error Response
  */
 export interface HttpErrorResponse {
@@ -212,28 +255,28 @@ export const mapErrorToStatus = (
         return {
           status: 400,
           error: "Bad Request",
-          message: error.message,
+          message: sanitizeValidationError(error.message),
           field: error.field,
         };
       case "DocumentValidationError":
         return {
           status: 400,
           error: "Bad Request",
-          message: error.message,
+          message: sanitizeValidationError(error.message),
           field: error.field,
         };
       case "PermissionValidationError":
         return {
           status: 400,
           error: "Bad Request",
-          message: error.message,
+          message: sanitizeValidationError(error.message),
           field: error.field,
         };
       case "MetadataValidationError":
         return {
           status: 400,
           error: "Bad Request",
-          message: error.message,
+          message: sanitizeValidationError(error.message),
           field: error.field,
         };
 

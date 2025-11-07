@@ -4,7 +4,7 @@ import {
   DownloadTokenRepository,
   DownloadTokenRepositoryTag,
 } from "../../domain/download-token/repository";
-import { DownloadToken } from "../../domain/download-token/entity";
+import { DownloadTokenEntity as DownloadToken } from "../../domain/download-token/entity";
 import { DownloadTokenId, DocumentId } from "../../domain/refined/uuid";
 import {
   DownloadTokenNotFoundError,

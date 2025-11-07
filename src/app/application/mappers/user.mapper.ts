@@ -16,7 +16,10 @@ import type {
   UserProfileResponse,
   ListUsersResponse,
 } from "../dtos/user/response.dto";
-import type { User, UserPublic } from "../../domain/user/entity";
+import type {
+  UserEntity as User,
+  UserPublicEntity as UserPublic,
+} from "../../domain/user/entity";
 import type { EmailAddress } from "../../domain/refined/email";
 import type { HashedPassword } from "../../domain/refined/password";
 import type { UserRole } from "../../domain/user/value-object";

@@ -14,7 +14,10 @@ import type {
   PaginatedDocumentsResponse,
   SearchDocumentsResponse,
 } from "../dtos/document/response.dto";
-import { Document, type DocumentVersion } from "../../domain/document/entity";
+import {
+  DocumentEntity,
+  DocumentVersionEntity,
+} from "../../domain/document/entity";
 import type {
   Filename,
   MimeType,
@@ -87,7 +90,9 @@ export const DocumentResponseMapper = {
   /**
    * Map DocumentVersion to DocumentVersionResponse DTO
    */
-  toVersionResponse: (version: DocumentVersion): DocumentVersionResponse => ({
+  toVersionResponse: (
+    version: DocumentVersionEntity
+  ): DocumentVersionResponse => ({
     id: version.id,
     documentId: version.documentId,
     filename: version.filename,
@@ -103,8 +108,8 @@ export const DocumentResponseMapper = {
    * Map Document entity to DocumentResponse DTO
    * Uses latest version for file metadata, falls back to document metadata if no versions
    */
-  toDocumentResponse: (document: Document): DocumentResponse => {
-    const latestVersionOpt = Document.getLatestVersion(document);
+  toDocumentResponse: (document: DocumentEntity): DocumentResponse => {
+    const latestVersionOpt = document.getLatestVersion();
 
     return pipe(
       latestVersionOpt,
@@ -140,8 +145,11 @@ export const DocumentResponseMapper = {
    */
   toDocumentWithVersionResponse: (
     input:
-      | Document
-      | { document: Document; latestVersion: Option.Option<DocumentVersion> }
+      | DocumentEntity
+      | {
+          document: DocumentEntity;
+          latestVersion: Option.Option<DocumentVersionEntity>;
+        }
   ): DocumentWithVersionResponse => {
     // Check if input is DocumentWithVersion or plain Document
     const isDocumentWithVersion =
@@ -160,9 +168,9 @@ export const DocumentResponseMapper = {
       };
     } else {
       // Extract from document's versions array
-      const document = input as Document;
+      const document = input as DocumentEntity;
       const latestVersion = pipe(
-        Document.getLatestVersion(document),
+        document.getLatestVersion(),
         Option.map(DocumentResponseMapper.toVersionResponse)
       );
 
@@ -179,8 +187,8 @@ export const DocumentResponseMapper = {
    * Map Document and version to UploadDocumentResponse DTO
    */
   toUploadDocumentResponse: (
-    document: Document,
-    version: DocumentVersion
+    document: DocumentEntity,
+    version: DocumentVersionEntity
   ): UploadDocumentResponse => ({
     documentId: document.id,
     versionId: version.id,
@@ -192,7 +200,7 @@ export const DocumentResponseMapper = {
    * Map paginated documents to PaginatedDocumentsResponse DTO
    */
   toPaginatedDocumentsResponse: (
-    documents: readonly Document[],
+    documents: readonly DocumentEntity[],
     total: number,
     page: number,
     limit: number
@@ -215,7 +223,7 @@ export const DocumentResponseMapper = {
    * Map search results to SearchDocumentsResponse DTO
    */
   toSearchDocumentsResponse: (
-    documents: readonly Document[],
+    documents: readonly DocumentEntity[],
     total: number,
     page: number,
     limit: number

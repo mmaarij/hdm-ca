@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import { Document, DocumentVersion } from "./entity";
+import { DocumentEntity, DocumentVersionEntity } from "./entity";
 import { DocumentUpdateError, DuplicateDocumentError } from "./errors";
 import {
   Checksum,
@@ -23,7 +23,7 @@ export interface DocumentDomainService {
    * Validate that new content doesn't create a duplicate version
    */
   readonly validateNoDuplicateContent: (
-    existingVersions: readonly DocumentVersion[],
+    existingVersions: readonly DocumentVersionEntity[],
     newChecksum: Checksum
   ) => Effect.Effect<void, DuplicateDocumentError>;
 
@@ -31,7 +31,7 @@ export interface DocumentDomainService {
    * Prepare a new version for a document (business logic for version creation)
    */
   readonly prepareNewVersion: (
-    document: Document,
+    document: DocumentEntity,
     versionProps: {
       filename: Filename;
       originalName: Filename;
@@ -41,13 +41,13 @@ export interface DocumentDomainService {
       contentRef?: ContentRef;
       checksum?: Checksum;
     }
-  ) => Effect.Effect<DocumentVersion, DuplicateDocumentError>;
+  ) => Effect.Effect<DocumentVersionEntity, DuplicateDocumentError>;
 
   /**
    * Validate that a user can update a document (business rule)
    */
   readonly canUpdate: (
-    document: Document,
+    document: DocumentEntity,
     userId: UserId,
     isAdmin: boolean
   ) => Effect.Effect<void, DocumentUpdateError>;
@@ -56,14 +56,14 @@ export interface DocumentDomainService {
    * Calculate the next version number for a document
    */
   readonly getNextVersionNumber: (
-    document: Document
+    document: DocumentEntity
   ) => Effect.Effect<VersionNumber, never>;
 
   /**
    * Check if a version with given checksum already exists
    */
   readonly hasVersionWithChecksum: (
-    document: Document,
+    document: DocumentEntity,
     checksum: Checksum
   ) => Effect.Effect<boolean, never>;
 }
@@ -97,21 +97,21 @@ export const DocumentDomainServiceLive: DocumentDomainService = {
         );
       }
 
-      // Get next version number
-      const versionNumber =
-        yield* DocumentDomainServiceLive.getNextVersionNumber(document);
+      // Use the document entity's addVersion method to create the new version
+      // This ensures proper version number calculation and immutable updates
+      const updatedDocument = document.addVersion(versionProps);
 
-      // Create version entity
-      return DocumentVersion.create({
-        documentId: document.id,
-        filename: versionProps.filename,
-        originalName: versionProps.originalName,
-        mimeType: versionProps.mimeType,
-        size: versionProps.size,
-        versionNumber,
-        uploadedBy: versionProps.uploadedBy,
-        contentRef: versionProps.contentRef,
-        checksum: versionProps.checksum,
+      // Return the latest version
+      const latestVersionOpt = updatedDocument.getLatestVersion();
+      return yield* Option.match(latestVersionOpt, {
+        onNone: () =>
+          Effect.fail(
+            new DuplicateDocumentError({
+              message: "Failed to create new version",
+              checksum: versionProps.checksum ?? "",
+            })
+          ),
+        onSome: (version) => Effect.succeed(version),
       });
     }),
 

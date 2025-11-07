@@ -13,6 +13,9 @@ import { MetadataValidationError } from "./errors";
 import * as MetadataGuards from "./guards";
 import { MetadataId, DocumentMetadataSchema } from "./schema";
 
+// Re-export MetadataId for convenience (both type and value)
+export { MetadataId };
+
 // ============================================================================
 // Serialized Types
 // ============================================================================
@@ -111,65 +114,33 @@ export class DocumentMetadataEntity extends BaseEntity implements IEntity {
 }
 
 // ============================================================================
-// Legacy Type Aliases and Factory Functions (for backward compatibility)
+// Helper Functions
 // ============================================================================
 
 /**
- * Legacy DocumentMetadata type alias
- * @deprecated Use DocumentMetadataEntity instead
+ * Convert metadata array to map
  */
-export type DocumentMetadata = DocumentMetadataEntity;
+export const toMap = (
+  metadata: readonly DocumentMetadataEntity[]
+): MetadataMap => {
+  return Object.fromEntries(metadata.map((m) => [m.key, m.value]));
+};
 
 /**
- * Legacy DocumentMetadata factory functions
- * @deprecated Use DocumentMetadataEntity methods instead
+ * Create metadata entries from map
  */
-export const DocumentMetadata = {
-  /**
-   * Create a new metadata entry
-   */
-  create: (props: {
-    documentId: DocumentId;
-    key: MetadataKey;
-    value: MetadataValue;
-  }): DocumentMetadataEntity => {
-    return new DocumentMetadataEntity(
-      uuidv4() as MetadataId,
-      props.documentId,
-      props.key,
-      props.value,
-      new Date()
-    );
-  },
-
-  /**
-   * Update metadata value
-   */
-  updateValue: (
-    metadata: DocumentMetadataEntity,
-    newValue: MetadataValue
-  ): DocumentMetadataEntity => metadata.updateValue(newValue),
-
-  /**
-   * Convert metadata array to map
-   */
-  toMap: (metadata: readonly DocumentMetadataEntity[]): MetadataMap => {
-    return Object.fromEntries(metadata.map((m) => [m.key, m.value]));
-  },
-
-  /**
-   * Create metadata entries from map
-   */
-  fromMap: (
-    documentId: DocumentId,
-    map: MetadataMap
-  ): DocumentMetadataEntity[] => {
-    return Object.entries(map).map(([key, value]) =>
-      DocumentMetadata.create({
+export const fromMap = (
+  documentId: DocumentId,
+  map: MetadataMap
+): DocumentMetadataEntity[] => {
+  return Object.entries(map).map(
+    ([key, value]) =>
+      new DocumentMetadataEntity(
+        uuidv4() as MetadataId,
         documentId,
-        key: key as MetadataKey,
-        value: value as MetadataValue,
-      })
-    );
-  },
+        key as MetadataKey,
+        value as MetadataValue,
+        new Date()
+      )
+  );
 };

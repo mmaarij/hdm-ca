@@ -7,6 +7,7 @@
  */
 
 import { Effect, Option, pipe } from "effect";
+import { v4 as uuidv4 } from "uuid";
 import type { DocumentRepository } from "../../domain/document/repository";
 import type { UserRepository } from "../../domain/user/repository";
 import type { PermissionRepository } from "../../domain/permission/repository";
@@ -16,7 +17,10 @@ import {
 } from "../../domain/document/errors";
 import { NotFoundError, ForbiddenError } from "../../domain/shared/base.errors";
 import { InsufficientPermissionError } from "../utils/errors";
-import { Document, DocumentVersion } from "../../domain/document/entity";
+import {
+  DocumentEntity,
+  DocumentVersionEntity,
+} from "../../domain/document/entity";
 import { DocumentDomainServiceLive } from "../../domain/document/service";
 import {
   isAdmin,
@@ -85,7 +89,7 @@ export const uploadDocument =
                       message: `Document with ID ${command.documentId} not found`,
                     })
                   ),
-                onSome: (doc: Document) =>
+                onSome: (doc: DocumentEntity) =>
                   pipe(
                     Effect.all({
                       user: pipe(
@@ -133,37 +137,51 @@ export const uploadDocument =
                       checksum: "",
                     })
                   )
-                : Effect.succeed({
-                    document: Document.create({
+                : pipe(
+                    DocumentEntity.create({
+                      id: uuidv4() as any,
                       filename: (command.file.name || "untitled") as any,
                       originalName: (command.file.name || "untitled") as any,
-                      mimeType: (command.file.type ||
-                        "application/octet-stream") as any,
+                      mimeType: (
+                        command.file.type || "application/octet-stream"
+                      )
+                        .split(";")[0]
+                        .trim() as any,
                       size: command.file.size as any,
                       uploadedBy: command.uploadedBy,
+                      createdAt: new Date().toISOString() as any,
+                      updatedAt: new Date().toISOString() as any,
                     }),
-                    isNewDocument: true,
-                  })
+                    Effect.map((document) => ({
+                      document,
+                      isNewDocument: true,
+                    })),
+                    Effect.mapError(
+                      (e) =>
+                        new DuplicateDocumentError({
+                          message: `Failed to create document: ${e.message}`,
+                          checksum: "",
+                        })
+                    )
+                  )
             )
           ),
-      Effect.map(({ document, isNewDocument }) => {
-        const tempVersion = DocumentVersion.create({
-          documentId: document.id,
-          filename: (command.file.name || "untitled") as any,
-          originalName: (command.file.name || "untitled") as any,
-          mimeType: (command.file.type || "application/octet-stream") as any,
-          size: command.file.size as any,
-          versionNumber: (document.versions.length + 1) as any,
-          uploadedBy: command.uploadedBy,
-        });
-        return { document, isNewDocument, tempVersion };
-      }),
-      Effect.flatMap(({ document, isNewDocument, tempVersion }) =>
+      Effect.flatMap(({ document, isNewDocument }) =>
+        pipe(
+          // Generate temporary version ID for storage
+          Effect.succeed({
+            document,
+            isNewDocument,
+            tempVersionId: uuidv4() as any,
+          })
+        )
+      ),
+      Effect.flatMap(({ document, isNewDocument, tempVersionId }) =>
         pipe(
           deps.storageService.storeUploadedFile(
             command.file,
             document.id,
-            tempVersion.id
+            tempVersionId
           ),
           Effect.map((storedFile) => ({
             document,
@@ -184,10 +202,13 @@ export const uploadDocument =
           : Effect.succeed({ document, isNewDocument, storedFile })
       ),
       Effect.map(({ document, isNewDocument, storedFile }) => {
-        const documentWithVersion = Document.addVersion(document, {
+        // Use the entity's addVersion method to add a new version
+        const documentWithVersion = document.addVersion({
           filename: storedFile.filename as any,
           originalName: storedFile.originalName as any,
-          mimeType: (command.file.type || "application/octet-stream") as any,
+          mimeType: (command.file.type || "application/octet-stream")
+            .split(";")[0]
+            .trim() as any,
           size: command.file.size as any,
           uploadedBy: command.uploadedBy,
           path: storedFile.path as any,
@@ -203,7 +224,8 @@ export const uploadDocument =
         )
       ),
       Effect.tap(({ savedDocument, isNewDocument }) => {
-        const latestVersionOpt = Document.getLatestVersion(savedDocument);
+        // Use the entity's getLatestVersion method
+        const latestVersionOpt = savedDocument.getLatestVersion();
         const latestVersion = Option.getOrThrow(latestVersionOpt);
         return deps.documentRepo.addAudit(
           savedDocument.id,
@@ -214,7 +236,8 @@ export const uploadDocument =
       }),
       Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e)))),
       Effect.map(({ savedDocument }) => {
-        const latestVersionOpt = Document.getLatestVersion(savedDocument);
+        // Use the entity's getLatestVersion method
+        const latestVersionOpt = savedDocument.getLatestVersion();
         const latestVersion = Option.getOrThrow(latestVersionOpt);
 
         return {
@@ -279,7 +302,8 @@ export const getDocument =
       ),
       Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e)))),
       Effect.map((document) => {
-        const latestVersionOpt = Document.getLatestVersion(document);
+        // Use the entity's getLatestVersion method
+        const latestVersionOpt = document.getLatestVersion();
         const latestVersion = Option.getOrThrow(latestVersionOpt);
 
         return {

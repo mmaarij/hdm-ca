@@ -6,6 +6,7 @@
  */
 
 import { Effect, Option, pipe } from "effect";
+import { v4 as uuidv4 } from "uuid";
 import type { PermissionRepository } from "../../domain/permission/repository";
 import type { DocumentRepository } from "../../domain/document/repository";
 import type { UserRepository } from "../../domain/user/repository";
@@ -23,7 +24,7 @@ import { loadEntity } from "../utils/effect-helpers";
 import type { UserId, DocumentId } from "../../domain/refined/uuid";
 import {
   PermissionId,
-  DocumentPermission,
+  DocumentPermissionEntity as DocumentPermission,
 } from "../../domain/permission/entity";
 import type {
   GrantPermissionCommand,
@@ -99,8 +100,7 @@ export const grantPermission =
       ),
       Effect.flatMap(({ existingPermissions }) => {
         if (existingPermissions.length > 0) {
-          const updatedPermission = DocumentPermission.updatePermission(
-            existingPermissions[0],
+          const updatedPermission = existingPermissions[0].updatePermission(
             command.permission
           );
           return pipe(
@@ -111,14 +111,19 @@ export const grantPermission =
             }))
           );
         } else {
+          const newPermissionId = uuidv4() as PermissionId;
           const newPermission = DocumentPermission.create({
+            id: newPermissionId,
             documentId: command.documentId,
             userId: command.userId,
             permission: command.permission,
             grantedBy: command.grantedBy,
           });
           return pipe(
-            deps.permissionRepo.save(newPermission),
+            newPermission,
+            Effect.flatMap((permission) =>
+              deps.permissionRepo.save(permission)
+            ),
             Effect.map((permission) => ({
               permission,
               isNew: true,
@@ -191,8 +196,7 @@ export const updatePermission =
             )
       ),
       Effect.flatMap((permission) => {
-        const updatedPermission = DocumentPermission.updatePermission(
-          permission,
+        const updatedPermission = permission.updatePermission(
           command.permission
         );
         return pipe(

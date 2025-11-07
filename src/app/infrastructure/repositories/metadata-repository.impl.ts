@@ -4,7 +4,7 @@ import {
   MetadataRepository,
   MetadataRepositoryTag,
 } from "../../domain/metedata/repository";
-import { DocumentMetadata, MetadataId } from "../../domain/metedata/entity";
+import { DocumentMetadataEntity as DocumentMetadata, MetadataId } from "../../domain/metedata/entity";
 import {
   MetadataNotFoundError,
   MetadataAlreadyExistsError,

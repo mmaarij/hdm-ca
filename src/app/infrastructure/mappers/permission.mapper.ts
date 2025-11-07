@@ -1,6 +1,6 @@
 import { Option } from "effect";
 import {
-  DocumentPermission,
+  DocumentPermissionEntity,
   PermissionId,
 } from "../../domain/permission/entity";
 import { DocumentId, UserId } from "../../domain/refined/uuid";
@@ -25,22 +25,22 @@ export const PermissionMapper = {
   /**
    * Database → Domain
    */
-  toDomain: (row: PermissionRow): DocumentPermission => ({
-    id: row.id as PermissionId,
-    documentId: row.documentId as DocumentId,
-    userId: row.userId as UserId,
-    permission: row.permission as PermissionType,
-    grantedBy: row.grantedBy as UserId,
-    grantedAt:
+  toDomain: (row: PermissionRow): DocumentPermissionEntity =>
+    new DocumentPermissionEntity(
+      row.id as PermissionId,
+      row.documentId as DocumentId,
+      row.userId as UserId,
+      row.permission as PermissionType,
+      row.grantedBy as UserId,
       typeof row.grantedAt === "string"
         ? new Date(row.grantedAt)
-        : row.grantedAt,
-  }),
+        : row.grantedAt
+    ),
 
   /**
    * Domain → Database Create Input
    */
-  toDbCreate: (permission: DocumentPermission) => ({
+  toDbCreate: (permission: DocumentPermissionEntity) => ({
     id: permission.id,
     documentId: permission.documentId,
     userId: permission.userId,
@@ -52,13 +52,13 @@ export const PermissionMapper = {
   /**
    * Domain → Database Update Input
    */
-  toDbUpdate: (permission: DocumentPermission) => ({
+  toDbUpdate: (permission: DocumentPermissionEntity) => ({
     permission: permission.permission,
   }),
 
   /**
    * Convert array of rows to domain entities
    */
-  toDomainMany: (rows: PermissionRow[]): DocumentPermission[] =>
+  toDomainMany: (rows: PermissionRow[]): DocumentPermissionEntity[] =>
     rows.map(PermissionMapper.toDomain),
 };

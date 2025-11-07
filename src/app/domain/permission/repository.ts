@@ -1,5 +1,8 @@
 import { Effect, Option, Context } from "effect";
-import { DocumentPermission, PermissionId } from "./entity";
+import {
+  DocumentPermissionEntity as DocumentPermission,
+  PermissionId,
+} from "./entity";
 import { PermissionDomainError } from "./errors";
 import { DocumentId, UserId } from "../refined/uuid";
 import { PermissionType } from "./value-object";

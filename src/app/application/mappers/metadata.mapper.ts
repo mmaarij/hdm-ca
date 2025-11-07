@@ -13,7 +13,7 @@ import type {
   ListMetadataResponse,
   MetadataMapResponse,
 } from "../dtos/metedata/response.dto";
-import type { DocumentMetadata } from "../../domain/metedata/entity";
+import type { DocumentMetadataEntity as DocumentMetadata } from "../../domain/metedata/entity";
 import type { DocumentId, UserId } from "../../domain/refined/uuid";
 import type {
   MetadataKey,

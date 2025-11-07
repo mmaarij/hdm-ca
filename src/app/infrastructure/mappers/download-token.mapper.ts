@@ -1,8 +1,5 @@
 import { Option } from "effect";
-import {
-  DownloadToken,
-  DownloadTokenWithDocument,
-} from "../../domain/download-token/entity";
+import { DownloadTokenEntity } from "../../domain/download-token/entity";
 import {
   DownloadTokenId,
   DocumentId,
@@ -10,6 +7,7 @@ import {
   UserId,
 } from "../../domain/refined/uuid";
 import { Token } from "../../domain/download-token/value-object";
+import { normalizeMaybe } from "../../domain/shared/base-entity";
 
 /**
  * Database row type for DownloadToken (from Drizzle)
@@ -32,33 +30,34 @@ export const DownloadTokenMapper = {
   /**
    * Database → Domain
    */
-  toDomain: (row: DownloadTokenRow): DownloadToken => ({
-    id: row.id as DownloadTokenId,
-    documentId: row.documentId as DocumentId,
-    versionId: row.versionId
-      ? Option.some(row.versionId as DocumentVersionId)
-      : Option.none(),
-    token: row.token as Token,
-    expiresAt:
+  toDomain: (row: DownloadTokenRow): DownloadTokenEntity =>
+    new DownloadTokenEntity(
+      row.id as DownloadTokenId,
+      row.documentId as DocumentId,
+      normalizeMaybe(
+        row.versionId ? (row.versionId as DocumentVersionId) : null
+      ),
+      row.token as Token,
       typeof row.expiresAt === "string"
         ? new Date(row.expiresAt)
         : row.expiresAt,
-    usedAt: row.usedAt
-      ? Option.some(
-          typeof row.usedAt === "string" ? new Date(row.usedAt) : row.usedAt
-        )
-      : Option.none(),
-    createdBy: row.createdBy as UserId,
-    createdAt:
+      normalizeMaybe(
+        row.usedAt
+          ? typeof row.usedAt === "string"
+            ? new Date(row.usedAt)
+            : row.usedAt
+          : null
+      ),
+      row.createdBy as UserId,
       typeof row.createdAt === "string"
         ? new Date(row.createdAt)
-        : row.createdAt,
-  }),
+        : row.createdAt
+    ),
 
   /**
    * Domain → Database Create Input
    */
-  toDbCreate: (token: DownloadToken) => ({
+  toDbCreate: (token: DownloadTokenEntity) => ({
     id: token.id,
     documentId: token.documentId,
     versionId: Option.getOrNull(token.versionId),
@@ -75,7 +74,7 @@ export const DownloadTokenMapper = {
   /**
    * Domain → Database Update Input (for marking as used)
    */
-  toDbUpdate: (token: DownloadToken) => ({
+  toDbUpdate: (token: DownloadTokenEntity) => ({
     usedAt: Option.match(token.usedAt, {
       onNone: () => null,
       onSome: (date) => date.toISOString(),
@@ -85,6 +84,6 @@ export const DownloadTokenMapper = {
   /**
    * Convert array of rows to domain entities
    */
-  toDomainMany: (rows: DownloadTokenRow[]): DownloadToken[] =>
+  toDomainMany: (rows: DownloadTokenRow[]): DownloadTokenEntity[] =>
     rows.map(DownloadTokenMapper.toDomain),
 };

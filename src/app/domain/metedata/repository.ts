@@ -1,5 +1,5 @@
 import { Effect, Option, Context } from "effect";
-import { DocumentMetadata, MetadataId } from "./entity";
+import { DocumentMetadataEntity as DocumentMetadata, MetadataId } from "./entity";
 import { MetadataDomainError } from "./errors";
 import { DocumentId } from "../refined/uuid";
 

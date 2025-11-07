@@ -6,6 +6,7 @@
  */
 
 import { Effect, Option, pipe } from "effect";
+import { v4 as uuidv4 } from "uuid";
 import type { MetadataRepository } from "../../domain/metedata/repository";
 import type { DocumentRepository } from "../../domain/document/repository";
 import type { UserRepository } from "../../domain/user/repository";
@@ -20,7 +21,10 @@ import {
   requireWritePermission,
 } from "../../domain/permission/service";
 import { loadEntity } from "../utils/effect-helpers";
-import { DocumentMetadata, MetadataId } from "../../domain/metedata/entity";
+import {
+  DocumentMetadataEntity as DocumentMetadata,
+  MetadataId,
+} from "../../domain/metedata/entity";
 import type { UserId, DocumentId } from "../../domain/refined/uuid";
 import type {
   AddMetadataCommand,
@@ -97,14 +101,18 @@ export const addMetadata =
           Effect.map(() => ({ document, user }))
         )
       ),
-      Effect.flatMap(() => {
-        const newMetadata = DocumentMetadata.create({
-          documentId: command.documentId,
-          key: command.key as any,
-          value: command.value as any,
-        });
-        return deps.metadataRepo.save(newMetadata);
-      }),
+      Effect.flatMap(() =>
+        pipe(
+          DocumentMetadata.create({
+            id: uuidv4() as any,
+            documentId: command.documentId,
+            key: command.key as any,
+            value: command.value as any,
+            createdAt: new Date().toISOString() as any,
+          }),
+          Effect.flatMap((newMetadata) => deps.metadataRepo.save(newMetadata))
+        )
+      ),
       Effect.tap((metadata) =>
         deps.documentRepo.addAudit(
           command.documentId,
@@ -168,10 +176,7 @@ export const updateMetadata =
         )
       ),
       Effect.flatMap((metadata) => {
-        const updatedMetadata = DocumentMetadata.updateValue(
-          metadata,
-          command.value as any
-        );
+        const updatedMetadata = metadata.updateValue(command.value as any);
         return pipe(
           deps.metadataRepo.save(updatedMetadata),
           Effect.map((saved) => ({ saved, metadata }))

@@ -1,5 +1,8 @@
 import { Option } from "effect";
-import { DocumentMetadata, MetadataId } from "../../domain/metedata/entity";
+import {
+  DocumentMetadataEntity,
+  MetadataId,
+} from "../../domain/metedata/entity";
 import { DocumentId } from "../../domain/refined/uuid";
 import { MetadataKey, MetadataValue } from "../../domain/metedata/value-object";
 
@@ -21,21 +24,21 @@ export const MetadataMapper = {
   /**
    * Database → Domain
    */
-  toDomain: (row: MetadataRow): DocumentMetadata => ({
-    id: row.id as MetadataId,
-    documentId: row.documentId as DocumentId,
-    key: row.key as MetadataKey,
-    value: row.value as MetadataValue,
-    createdAt:
+  toDomain: (row: MetadataRow): DocumentMetadataEntity =>
+    new DocumentMetadataEntity(
+      row.id as MetadataId,
+      row.documentId as DocumentId,
+      row.key as MetadataKey,
+      row.value as MetadataValue,
       typeof row.createdAt === "string"
         ? new Date(row.createdAt)
-        : row.createdAt,
-  }),
+        : row.createdAt
+    ),
 
   /**
    * Domain → Database Create Input
    */
-  toDbCreate: (metadata: DocumentMetadata) => ({
+  toDbCreate: (metadata: DocumentMetadataEntity) => ({
     id: metadata.id,
     documentId: metadata.documentId,
     key: metadata.key,
@@ -46,13 +49,13 @@ export const MetadataMapper = {
   /**
    * Domain → Database Update Input
    */
-  toDbUpdate: (metadata: DocumentMetadata) => ({
+  toDbUpdate: (metadata: DocumentMetadataEntity) => ({
     value: metadata.value,
   }),
 
   /**
    * Convert array of rows to domain entities
    */
-  toDomainMany: (rows: MetadataRow[]): DocumentMetadata[] =>
+  toDomainMany: (rows: MetadataRow[]): DocumentMetadataEntity[] =>
     rows.map(MetadataMapper.toDomain),
 };

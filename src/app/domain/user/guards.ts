@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { User, UserPublic } from "./entity";
+import { UserEntity as User, UserPublicEntity as UserPublic } from "./entity";
 import { UserRole } from "./value-object";
 
 /**

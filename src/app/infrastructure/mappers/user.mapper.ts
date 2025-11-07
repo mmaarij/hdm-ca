@@ -1,5 +1,5 @@
 import { Option } from "effect";
-import { User, UserPublic } from "../../domain/user/entity";
+import { UserEntity, UserPublicEntity } from "../../domain/user/entity";
 import { UserId } from "../../domain/refined/uuid";
 import { EmailAddress } from "../../domain/refined/email";
 import { HashedPassword } from "../../domain/refined/password";
@@ -28,26 +28,25 @@ export const UserMapper = {
    * Database → Domain
    * Convert Drizzle row to domain entity
    */
-  toDomain: (row: UserRow): User => ({
-    id: row.id as UserId,
-    email: row.email as EmailAddress,
-    password: row.password as HashedPassword,
-    role: row.role as UserRole,
-    createdAt:
+  toDomain: (row: UserRow): UserEntity =>
+    new UserEntity(
+      row.id as UserId,
+      row.email as EmailAddress,
+      row.password as HashedPassword,
+      row.role as UserRole,
       typeof row.createdAt === "string"
         ? new Date(row.createdAt)
         : row.createdAt,
-    updatedAt:
       typeof row.updatedAt === "string"
         ? new Date(row.updatedAt)
-        : row.updatedAt,
-  }),
+        : row.updatedAt
+    ),
 
   /**
    * Domain → Database Create Input
    * Convert domain entity to Drizzle insert input
    */
-  toDbCreate: (user: User) => ({
+  toDbCreate: (user: UserEntity) => ({
     id: user.id,
     email: user.email,
     password: user.password,
@@ -60,7 +59,7 @@ export const UserMapper = {
    * Domain → Database Update Input
    * Convert domain entity to Drizzle update input
    */
-  toDbUpdate: (user: User) => ({
+  toDbUpdate: (user: UserEntity) => ({
     email: user.email,
     password: user.password,
     role: user.role,
@@ -70,16 +69,11 @@ export const UserMapper = {
   /**
    * Convert to public representation (remove password)
    */
-  toPublic: (user: User): UserPublic => ({
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-  }),
+  toPublic: (user: UserEntity): UserPublicEntity => user.toPublic(),
 
   /**
    * Convert array of rows to domain entities
    */
-  toDomainMany: (rows: UserRow[]): User[] => rows.map(UserMapper.toDomain),
+  toDomainMany: (rows: UserRow[]): UserEntity[] =>
+    rows.map(UserMapper.toDomain),
 };

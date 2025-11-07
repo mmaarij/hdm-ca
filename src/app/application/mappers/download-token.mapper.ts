@@ -12,8 +12,8 @@ import type {
   ValidateTokenResponse,
   CleanupTokensResponse,
 } from "../dtos/download-token/response.dto";
-import type { DownloadToken } from "../../domain/download-token/entity";
-import type { DocumentVersion } from "../../domain/document/entity";
+import type { DownloadTokenEntity as DownloadToken } from "../../domain/download-token/entity";
+import type { DocumentVersionEntity as DocumentVersion } from "../../domain/document/entity";
 
 /**
  * Command to Domain Mappers

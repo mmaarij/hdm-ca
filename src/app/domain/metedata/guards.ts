@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { DocumentMetadata } from "./entity";
+import { DocumentMetadataEntity as DocumentMetadata } from "./entity";
 import { isReservedKey } from "./value-object";
 import { MetadataValidationError } from "./errors";
 

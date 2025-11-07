@@ -14,7 +14,7 @@ import type {
   ListPermissionsResponse,
   CheckPermissionResponse,
 } from "../dtos/permission/response.dto";
-import type { DocumentPermission } from "../../domain/permission/entity";
+import type { DocumentPermissionEntity as DocumentPermission } from "../../domain/permission/entity";
 import type { DocumentId, UserId } from "../../domain/refined/uuid";
 import type { PermissionType } from "../../domain/permission/value-object";
 
@@ -70,11 +70,11 @@ export const PermissionResponseMapper = {
   }),
 
   /**
-   * Map DocumentPermission to GrantPermissionResponse DTO
+   * Map DocumentPermission entity to GrantPermissionResponse DTO
    */
   toGrantPermissionResponse: (
     permission: DocumentPermission,
-    isNew: boolean
+    isNew: boolean = true
   ): GrantPermissionResponse => ({
     permission: PermissionResponseMapper.toPermissionResponse(permission),
     message: isNew

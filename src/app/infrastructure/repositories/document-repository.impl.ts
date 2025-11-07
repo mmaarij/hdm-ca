@@ -12,7 +12,10 @@ import {
   DocumentRepository,
   DocumentRepositoryTag,
 } from "../../domain/document/repository";
-import { Document, DocumentWithVersion } from "../../domain/document/entity";
+import {
+  DocumentEntity as Document,
+  DocumentWithVersion,
+} from "../../domain/document/entity";
 import { DocumentId, UserId } from "../../domain/refined/uuid";
 import {
   DocumentNotFoundError,

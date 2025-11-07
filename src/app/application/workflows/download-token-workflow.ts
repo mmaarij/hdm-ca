@@ -6,6 +6,8 @@
  */
 
 import { Effect, Option, pipe } from "effect";
+import { v4 as uuidv4 } from "uuid";
+import { randomBytes } from "crypto";
 import type { DownloadTokenRepository } from "../../domain/download-token/repository";
 import type { DocumentRepository } from "../../domain/document/repository";
 import type { UserRepository } from "../../domain/user/repository";
@@ -24,8 +26,8 @@ import {
 import { loadEntity } from "../utils/effect-helpers";
 import type { UserId, DocumentId } from "../../domain/refined/uuid";
 import type { Token } from "../../domain/download-token/value-object";
-import { DownloadToken } from "../../domain/download-token/entity";
-import { Document } from "../../domain/document/entity";
+import { DownloadTokenEntity as DownloadToken } from "../../domain/download-token/entity";
+import { DocumentEntity as Document } from "../../domain/document/entity";
 import { DownloadTokenResponseMapper } from "../mappers/download-token.mapper";
 import type {
   GenerateDownloadLinkCommand,
@@ -98,7 +100,7 @@ export const generateDownloadLink =
         const versionId =
           command.versionId ??
           pipe(
-            Document.getLatestVersion(document),
+            document.getLatestVersion(),
             Option.match({
               onNone: () => undefined as any,
               onSome: (version) => version.id,
@@ -119,18 +121,24 @@ export const generateDownloadLink =
       }),
       Effect.flatMap(({ document, user, versionId }) => {
         const ttlMs = command.ttlMs ?? 5 * 60 * 1000;
-        const expiresInHours = ttlMs / (60 * 60 * 1000);
-
-        const newToken = DownloadToken.create({
-          documentId: command.documentId,
-          versionId,
-          createdBy: command.userId,
-          expiresInHours,
-        });
+        const expiresAt = new Date(Date.now() + ttlMs);
 
         return pipe(
-          deps.tokenRepo.save(newToken),
-          Effect.map((token) => ({ token, versionId }))
+          DownloadToken.create({
+            id: uuidv4() as any,
+            documentId: command.documentId,
+            versionId,
+            token: randomBytes(32).toString("base64url") as any,
+            expiresAt: expiresAt.toISOString() as any,
+            createdBy: command.userId,
+            createdAt: new Date().toISOString() as any,
+          }),
+          Effect.flatMap((newToken) =>
+            pipe(
+              deps.tokenRepo.save(newToken),
+              Effect.map((token) => ({ token, versionId }))
+            )
+          )
         );
       }),
       Effect.tap(({ token }) =>
@@ -164,7 +172,7 @@ export const validateToken =
           onNone: () =>
             DownloadTokenResponseMapper.toValidateTokenResponse(false),
           onSome: (token: DownloadToken) =>
-            DownloadToken.isExpired(token) || DownloadToken.isUsed(token)
+            token.isExpired() || token.isUsed()
               ? DownloadTokenResponseMapper.toValidateTokenResponse(false)
               : DownloadTokenResponseMapper.toValidateTokenResponse(
                   true,
@@ -205,7 +213,7 @@ export const downloadFile =
         })
       ),
       Effect.flatMap((token) =>
-        DownloadToken.isExpired(token)
+        token.isExpired()
           ? Effect.fail(
               new DownloadTokenExpiredError({
                 message: "Download token has expired",
@@ -216,7 +224,7 @@ export const downloadFile =
           : Effect.succeed(token)
       ),
       Effect.flatMap((token) =>
-        DownloadToken.isUsed(token)
+        token.isUsed()
           ? Effect.fail(
               new DownloadTokenAlreadyUsedError({
                 message: "Download token has already been used",
@@ -254,7 +262,7 @@ export const downloadFile =
           return Effect.succeed({ token, document, version });
         } else {
           return pipe(
-            Document.getLatestVersion(document),
+            document.getLatestVersion(),
             Option.match({
               onNone: () =>
                 Effect.fail(
@@ -271,7 +279,7 @@ export const downloadFile =
       }),
       Effect.flatMap(({ token, document, version }) =>
         pipe(
-          deps.tokenRepo.save(DownloadToken.markAsUsed(token)),
+          deps.tokenRepo.save(token.markAsUsed()),
           Effect.map(() => ({ token, document, version }))
         )
       ),

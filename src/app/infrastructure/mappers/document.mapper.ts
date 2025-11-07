@@ -1,7 +1,7 @@
 import { Option } from "effect";
 import {
-  Document,
-  DocumentVersion,
+  DocumentEntity,
+  DocumentVersionEntity,
   DocumentWithVersion,
   toDocumentWithVersion,
 } from "../../domain/document/entity";
@@ -19,6 +19,7 @@ import {
   ContentRef,
   Checksum,
 } from "../../domain/document/value-object";
+import { normalizeMaybe } from "../../domain/shared/base-entity";
 
 /**
  * Database row type for Document (from Drizzle)
@@ -68,24 +69,23 @@ export const DocumentMapper = {
   /**
    * Database → Domain (Document only, no versions)
    */
-  toDomain: (row: DocumentRow): Document => ({
-    id: row.id as DocumentId,
-    filename: row.filename as Filename,
-    originalName: row.originalName as Filename,
-    mimeType: row.mimeType as MimeType,
-    size: row.size as FileSize,
-    path: row.path ? Option.some(row.path as FilePath) : Option.none(),
-    uploadedBy: row.uploadedBy as UserId,
-    createdAt:
+  toDomain: (row: DocumentRow): DocumentEntity =>
+    new DocumentEntity(
+      row.id as DocumentId,
+      row.filename as Filename,
+      row.originalName as Filename,
+      row.mimeType as MimeType,
+      row.size as FileSize,
+      normalizeMaybe(row.path as FilePath | null),
+      row.uploadedBy as UserId,
       typeof row.createdAt === "string"
         ? new Date(row.createdAt)
         : row.createdAt,
-    updatedAt:
       typeof row.updatedAt === "string"
         ? new Date(row.updatedAt)
         : row.updatedAt,
-    versions: [], // Empty by default, populate separately
-  }),
+      [] // Empty by default, populate separately
+    ),
 
   /**
    * Database → Domain (Document with versions)
@@ -93,20 +93,31 @@ export const DocumentMapper = {
   toDomainWithVersions: (
     row: DocumentRow,
     versionRows: DocumentVersionRow[]
-  ): Document => {
-    const document = DocumentMapper.toDomain(row);
+  ): DocumentEntity => {
     const versions = versionRows.map(DocumentVersionMapper.toDomain);
 
-    return {
-      ...document,
-      versions,
-    };
+    return new DocumentEntity(
+      row.id as DocumentId,
+      row.filename as Filename,
+      row.originalName as Filename,
+      row.mimeType as MimeType,
+      row.size as FileSize,
+      normalizeMaybe(row.path as FilePath | null),
+      row.uploadedBy as UserId,
+      typeof row.createdAt === "string"
+        ? new Date(row.createdAt)
+        : row.createdAt,
+      typeof row.updatedAt === "string"
+        ? new Date(row.updatedAt)
+        : row.updatedAt,
+      versions
+    );
   },
 
   /**
    * Domain → Database Create Input
    */
-  toDbCreate: (document: Document) => ({
+  toDbCreate: (document: DocumentEntity) => ({
     id: document.id,
     filename: document.filename,
     originalName: document.originalName,
@@ -121,7 +132,7 @@ export const DocumentMapper = {
   /**
    * Domain → Database Update Input
    */
-  toDbUpdate: (document: Document) => ({
+  toDbUpdate: (document: DocumentEntity) => ({
     filename: document.filename,
     originalName: document.originalName,
     path: Option.getOrNull(document.path),
@@ -131,7 +142,7 @@ export const DocumentMapper = {
   /**
    * Convert array of rows to domain entities
    */
-  toDomainMany: (rows: DocumentRow[]): Document[] =>
+  toDomainMany: (rows: DocumentRow[]): DocumentEntity[] =>
     rows.map(DocumentMapper.toDomain),
 };
 
@@ -142,32 +153,28 @@ export const DocumentVersionMapper = {
   /**
    * Database → Domain
    */
-  toDomain: (row: DocumentVersionRow): DocumentVersion => ({
-    id: row.id as DocumentVersionId,
-    documentId: row.documentId as DocumentId,
-    filename: row.filename as Filename,
-    originalName: row.originalName as Filename,
-    mimeType: row.mimeType as MimeType,
-    size: row.size as FileSize,
-    path: row.path ? Option.some(row.path as FilePath) : Option.none(),
-    contentRef: row.contentRef
-      ? Option.some(row.contentRef as ContentRef)
-      : Option.none(),
-    checksum: row.checksum
-      ? Option.some(row.checksum as Checksum)
-      : Option.none(),
-    versionNumber: row.versionNumber as VersionNumber,
-    uploadedBy: row.uploadedBy as UserId,
-    createdAt:
+  toDomain: (row: DocumentVersionRow): DocumentVersionEntity =>
+    new DocumentVersionEntity(
+      row.id as DocumentVersionId,
+      row.documentId as DocumentId,
+      row.filename as Filename,
+      row.originalName as Filename,
+      row.mimeType as MimeType,
+      row.size as FileSize,
+      normalizeMaybe(row.path as FilePath | null),
+      normalizeMaybe(row.contentRef as ContentRef | null),
+      normalizeMaybe(row.checksum as Checksum | null),
+      row.versionNumber as VersionNumber,
+      row.uploadedBy as UserId,
       typeof row.createdAt === "string"
         ? new Date(row.createdAt)
-        : row.createdAt,
-  }),
+        : row.createdAt
+    ),
 
   /**
    * Domain → Database Create Input
    */
-  toDbCreate: (version: DocumentVersion) => ({
+  toDbCreate: (version: DocumentVersionEntity) => ({
     id: version.id,
     documentId: version.documentId,
     filename: version.filename,
@@ -185,7 +192,7 @@ export const DocumentVersionMapper = {
   /**
    * Domain → Database Update Input
    */
-  toDbUpdate: (version: DocumentVersion) => ({
+  toDbUpdate: (version: DocumentVersionEntity) => ({
     path: Option.getOrNull(version.path),
     contentRef: Option.getOrNull(version.contentRef),
     checksum: Option.getOrNull(version.checksum),
@@ -194,7 +201,7 @@ export const DocumentVersionMapper = {
   /**
    * Convert array of rows to domain entities
    */
-  toDomainMany: (rows: DocumentVersionRow[]): DocumentVersion[] =>
+  toDomainMany: (rows: DocumentVersionRow[]): DocumentVersionEntity[] =>
     rows.map(DocumentVersionMapper.toDomain),
 };
 
