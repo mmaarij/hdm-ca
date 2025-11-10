@@ -5,7 +5,6 @@ import {
   DocumentVersionId,
   UserId,
 } from "../refined/uuid";
-import { DateTime } from "../refined/date-time";
 import { Token } from "./value-object";
 
 /**
@@ -13,6 +12,9 @@ import { Token } from "./value-object";
  *
  * These schemas are used for validation and encoding/decoding of download token entities.
  * They define the structure for external input/output and ensure data integrity.
+ *
+ * Note: Entity schemas use S.Date for internal date representation.
+ * API DTOs use DateTime (DateFromString with branding) for JSON serialization.
  */
 
 // ============================================================================
@@ -27,16 +29,20 @@ export const DownloadTokenSchema = S.Struct({
   documentId: DocumentId,
   versionId: S.optional(DocumentVersionId),
   token: Token,
-  expiresAt: DateTime,
-  usedAt: S.optional(DateTime),
+  expiresAt: S.Date,
+  usedAt: S.optional(S.Date),
   createdBy: UserId,
-  createdAt: S.optional(DateTime),
+  createdAt: S.optional(S.Date),
 });
 
 /**
  * Type derived from DownloadToken Schema
  */
 export type DownloadTokenSchemaType = S.Schema.Type<typeof DownloadTokenSchema>;
+
+// Note: This schema is for API responses, not entity storage
+// Import DateTime here only for API boundary
+import { DateTime } from "../refined/date-time";
 
 /**
  * DownloadTokenWithDocument Schema for API responses

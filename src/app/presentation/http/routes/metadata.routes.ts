@@ -29,7 +29,11 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 metadataWorkflow.addMetadata({
-                  ...(body as any),
+                  ...(body as {
+                    documentId: string;
+                    key: string;
+                    value: string;
+                  }),
                   userId: auth.userId,
                 })
               )
@@ -38,7 +42,7 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -57,7 +61,7 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
                 metadataWorkflow.updateMetadata({
                   metadataId: params.metadataId,
                   userId: auth.userId,
-                  ...(body as any),
+                  ...(body as { value: string }),
                 })
               )
             )
@@ -65,7 +69,7 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -92,7 +96,7 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -118,7 +122,7 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -145,7 +149,7 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })

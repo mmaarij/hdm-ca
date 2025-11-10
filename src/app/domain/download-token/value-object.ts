@@ -22,6 +22,19 @@ export const generateToken = (): Token => {
 };
 
 /**
+ * Token Creation Helpers
+ *
+ * Create branded token types without 'as any' casts.
+ */
+export const TokenHelpers = {
+  /** Create Token from string (for validation/reconstruction) */
+  fromString: (token: string): Token => token as Token,
+
+  /** Generate a new secure random token */
+  generate: (): Token => generateToken(),
+} as const;
+
+/**
  * Token expiration duration (in milliseconds)
  */
 export const DEFAULT_TOKEN_EXPIRATION_MS = 24 * 60 * 60 * 1000; // 24 hours

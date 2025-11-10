@@ -17,6 +17,7 @@ import type {
 import type { DocumentPermissionEntity as DocumentPermission } from "../../domain/permission/entity";
 import type { DocumentId, UserId } from "../../domain/refined/uuid";
 import type { PermissionType } from "../../domain/permission/value-object";
+import { DateTimeHelpers } from "../../domain/refined/date-time";
 
 /**
  * Command to Domain Mappers
@@ -66,7 +67,7 @@ export const PermissionResponseMapper = {
     userId: permission.userId,
     permission: permission.permission,
     grantedBy: permission.grantedBy,
-    grantedAt: permission.grantedAt as any, // Branded Date type
+    grantedAt: DateTimeHelpers.fromDate(permission.grantedAt),
   }),
 
   /**

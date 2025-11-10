@@ -29,7 +29,11 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 permissionWorkflow.grantPermission({
-                  ...(body as any),
+                  ...(body as {
+                    documentId: string;
+                    userId: string;
+                    permission: string;
+                  }),
                   grantedBy: auth.userId,
                 })
               )
@@ -38,7 +42,7 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -57,7 +61,7 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
                 permissionWorkflow.updatePermission({
                   permissionId: params.permissionId,
                   updatedBy: auth.userId,
-                  ...(body as any),
+                  ...(body as { permission: string }),
                 })
               )
             )
@@ -65,7 +69,7 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -92,7 +96,7 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -118,7 +122,7 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -143,7 +147,7 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -159,14 +163,20 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap(() =>
-                permissionWorkflow.checkPermission(query as any)
+                permissionWorkflow.checkPermission(
+                  query as {
+                    documentId: string;
+                    userId: string;
+                    requiredPermission: string;
+                  }
+                )
               )
             )
           )
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })

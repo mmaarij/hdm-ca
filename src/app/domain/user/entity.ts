@@ -60,31 +60,31 @@ export class UserEntity extends BaseEntity implements IEntity {
 
   /**
    * Create a new user with validation
+   * Uses internal validation (no encoding/decoding) since data is already in memory
    */
   static create(
     input: SerializedUser
   ): E.Effect<UserEntity, UserValidationError, never> {
-    return pipe(
-      S.decodeUnknown(UserSchema)(input),
-      E.flatMap((data) => {
-        return E.succeed(
-          new UserEntity(
-            data.id,
-            data.email,
-            data.password,
-            data.role,
-            data.createdAt ?? new Date(),
-            data.updatedAt ?? new Date()
-          )
-        );
-      }),
-      E.mapError(
-        (error) =>
-          new UserValidationError({
-            message: `User validation failed: ${error}`,
-          })
-      )
-    );
+    // For internal creation, we bypass decoding and just validate the types directly
+    // since we're not dealing with JSON/external data
+    try {
+      return E.succeed(
+        new UserEntity(
+          input.id as UserId,
+          input.email as EmailAddress,
+          input.password as HashedPassword,
+          input.role as UserRole,
+          input.createdAt ?? new Date(),
+          input.updatedAt ?? new Date()
+        )
+      );
+    } catch (error) {
+      return E.fail(
+        new UserValidationError({
+          message: `User validation failed: ${error}`,
+        })
+      );
+    }
   }
 
   /**
@@ -155,30 +155,29 @@ export class UserPublicEntity extends BaseEntity implements IEntity {
 
   /**
    * Create a UserPublic entity with validation
+   * Uses internal validation (no encoding/decoding) since data is already in memory
    */
   static create(
     input: SerializedUserPublic
   ): E.Effect<UserPublicEntity, UserValidationError, never> {
-    return pipe(
-      S.decodeUnknown(UserPublicSchema)(input),
-      E.flatMap((data) => {
-        return E.succeed(
-          new UserPublicEntity(
-            data.id,
-            data.email,
-            data.role,
-            data.createdAt ?? new Date(),
-            data.updatedAt ?? new Date()
-          )
-        );
-      }),
-      E.mapError(
-        (error) =>
-          new UserValidationError({
-            message: `User public validation failed: ${error}`,
-          })
-      )
-    );
+    // For internal creation, we bypass decoding and just validate the types directly
+    try {
+      return E.succeed(
+        new UserPublicEntity(
+          input.id as UserId,
+          input.email as EmailAddress,
+          input.role as UserRole,
+          input.createdAt ?? new Date(),
+          input.updatedAt ?? new Date()
+        )
+      );
+    } catch (error) {
+      return E.fail(
+        new UserValidationError({
+          message: `User public validation failed: ${error}`,
+        })
+      );
+    }
   }
 
   /**

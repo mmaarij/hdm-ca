@@ -10,7 +10,7 @@ import {
   UserAlreadyExistsError,
   UserConstraintError,
 } from "../../domain/user/errors";
-import { DrizzleService } from "../services/drizzle-service";
+import { DrizzleService, hasAffectedRows } from "../services/drizzle-service";
 import { users } from "../models";
 import { UserMapper } from "../mappers/user.mapper";
 import { detectDbConstraint } from "../../domain/shared/base.repository";
@@ -127,7 +127,7 @@ export const UserRepositoryLive = Layer.effect(
         }),
         Effect.flatMap((result) => {
           // Check if any rows were affected (Bun SQLite returns result with changes)
-          if (!(result as any).changes && !(result as any).rowCount) {
+          if (!hasAffectedRows(result)) {
             return Effect.fail(
               new UserNotFoundError({ userId: id, message: "User not found" })
             );

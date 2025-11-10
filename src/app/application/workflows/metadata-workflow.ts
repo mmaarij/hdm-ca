@@ -27,6 +27,9 @@ import {
   DocumentMetadataEntity as DocumentMetadata,
   MetadataId,
 } from "../../domain/metedata/entity";
+import { UuidGenerators } from "../../domain/refined/uuid";
+import { DateTimeHelpers } from "../../domain/refined/date-time";
+import { MetadataHelpers } from "../../domain/metedata/value-object";
 import type { UserId, DocumentId } from "../../domain/refined/uuid";
 import type {
   AddMetadataInput,
@@ -118,11 +121,13 @@ export const addMetadata =
           Effect.flatMap(() =>
             pipe(
               DocumentMetadata.create({
-                id: uuidv4() as any,
+                id: UuidGenerators.uuid(),
                 documentId: command.documentId,
-                key: command.key as any,
-                value: command.value as any,
-                createdAt: new Date().toISOString() as any,
+                key: MetadataHelpers.key(command.key),
+                value: MetadataHelpers.value(command.value),
+                createdAt: DateTimeHelpers.fromISOString(
+                  new Date().toISOString()
+                ),
               }),
               Effect.flatMap((newMetadata) =>
                 deps.metadataRepo.save(newMetadata)
@@ -202,7 +207,9 @@ export const updateMetadata =
             )
           ),
           Effect.flatMap((metadata) => {
-            const updatedMetadata = metadata.updateValue(command.value as any);
+            const updatedMetadata = metadata.updateValue(
+              MetadataHelpers.value(command.value)
+            );
             return pipe(
               deps.metadataRepo.save(updatedMetadata),
               Effect.map((saved) => ({ saved, metadata }))

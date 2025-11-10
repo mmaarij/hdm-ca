@@ -13,7 +13,7 @@ import {
   PermissionAlreadyExistsError,
   PermissionConstraintError,
 } from "../../domain/permission/errors";
-import { DrizzleService } from "../services/drizzle-service";
+import { DrizzleService, hasAffectedRows } from "../services/drizzle-service";
 import { documentPermissions } from "../models";
 import { PermissionMapper } from "../mappers/permission.mapper";
 import { detectDbConstraint } from "../../domain/shared/base.repository";
@@ -176,7 +176,7 @@ export const PermissionRepositoryLive = Layer.effect(
             new PermissionConstraintError({ message: "Database error" }),
         }),
         Effect.flatMap((result) => {
-          if (!(result as any).changes && !(result as any).rowCount) {
+          if (!hasAffectedRows(result)) {
             return Effect.fail(
               new PermissionNotFoundError({
                 permissionId: id,

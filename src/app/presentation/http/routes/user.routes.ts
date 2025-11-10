@@ -10,6 +10,12 @@ import type { Runtime } from "effect";
 import { UserWorkflowTag } from "../../../application/workflows/user-workflow";
 import { runEffect } from "../utils/handler";
 import { withAuth, requireAuth } from "../middleware/auth.middleware";
+import {
+  RegisterResponse,
+  LoginResponse,
+  UserProfileResponse,
+  ListUsersResponse,
+} from "../../../application/dtos/user/response.dto";
 
 /**
  * Create user routes
@@ -26,11 +32,19 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         const effect = pipe(
           UserWorkflowTag,
           Effect.flatMap((userWorkflow) =>
-            userWorkflow.registerUser(body as any)
+            // Elysia body is untyped, validated by workflow
+            userWorkflow.registerUser(
+              body as { email: string; password: string; role?: string }
+            )
           )
         );
 
-        return runEffect(effect as any, runtime, headers);
+        return runEffect(
+          effect as Effect.Effect<any, any, R>,
+          runtime,
+          headers,
+          RegisterResponse
+        );
       })
 
       /**
@@ -41,10 +55,16 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         const headers = Object.fromEntries(request.headers.entries());
         const effect = pipe(
           UserWorkflowTag,
-          Effect.flatMap((userWorkflow) => userWorkflow.loginUser(body as any))
+          Effect.flatMap((userWorkflow) =>
+            userWorkflow.loginUser(body as { email: string; password: string })
+          )
         );
 
-        return runEffect(effect as any, runtime, headers);
+        return runEffect(
+          effect as Effect.Effect<any, any, R>,
+          runtime,
+          headers
+        );
       })
 
       /**
@@ -68,7 +88,7 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime,
           reqHeaders
         );
@@ -86,14 +106,17 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                userWorkflow.updateUserProfile(auth.userId, body as any)
+                userWorkflow.updateUserProfile(
+                  auth.userId,
+                  body as { email?: string; password?: string }
+                )
               )
             )
           )
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime,
           reqHeaders
         );
@@ -119,7 +142,7 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime,
           reqHeaders
         );
@@ -146,7 +169,7 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime,
           reqHeaders
         );
@@ -167,14 +190,14 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
                 userWorkflow.listUsers({
                   ...query,
                   userId: auth.userId,
-                } as any)
+                } as { page?: number; limit?: number; userId: string })
               )
             )
           )
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime,
           reqHeaders
         );

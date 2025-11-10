@@ -73,6 +73,9 @@ export const loadEntities = <
   T extends Record<string, Effect.Effect<any, any, any>>
 >(
   effects: T
+  // Note: Effect.all has complex generic inference that TypeScript struggles with.
+  // The return type maps each effect to its success value but is difficult to express precisely.
+  // Runtime behavior is correct; this is a type system limitation.
 ) => Effect.all(effects) as any;
 
 /**

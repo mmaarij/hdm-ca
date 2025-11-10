@@ -24,7 +24,9 @@ export const createUploadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
        */
       .post("/:documentId/:versionId", async ({ params, body, set }) => {
         const effect = pipe(
-          Effect.sync(() => (body as any)?.file),
+          // Note: Elysia's body type is unknown at compile time for multipart/form-data
+          // Runtime validation ensures file exists and is correct type
+          Effect.sync(() => (body as { file?: File | Blob })?.file),
           // Validate file exists
           Effect.flatMap((file): Effect.Effect<File | Blob, never> => {
             if (!file) {

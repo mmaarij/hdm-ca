@@ -12,11 +12,17 @@ export interface ServerConfig {
 /**
  * Load server config from environment
  */
-export const loadServerConfig = (): ServerConfig => ({
-  port: Number(process.env.PORT) || 3000,
-  hostname: process.env.HOSTNAME || "localhost",
-  environment: (process.env.NODE_ENV as any) || "development",
-});
+export const loadServerConfig = (): ServerConfig => {
+  const env = process.env.NODE_ENV;
+  const environment: ServerConfig["environment"] =
+    env === "production" || env === "test" ? env : "development";
+
+  return {
+    port: Number(process.env.PORT) || 3000,
+    hostname: process.env.HOSTNAME || "localhost",
+    environment,
+  };
+};
 
 /**
  * Server config as Effect

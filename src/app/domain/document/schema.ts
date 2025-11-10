@@ -1,6 +1,5 @@
 import { Schema as S } from "effect";
 import { DocumentId, DocumentVersionId, UserId } from "../refined/uuid";
-import { DateTime } from "../refined/date-time";
 import {
   Filename,
   FilePath,
@@ -16,6 +15,9 @@ import {
  *
  * These schemas are used for validation and encoding/decoding of domain entities.
  * They define the structure for external input/output and ensure data integrity.
+ *
+ * Note: Entity schemas use S.Date for internal date representation.
+ * API DTOs use DateTime (DateFromString with branding) for JSON serialization.
  */
 
 // ============================================================================
@@ -37,7 +39,7 @@ export const DocumentVersionSchema = S.Struct({
   checksum: S.optional(Checksum),
   versionNumber: VersionNumber,
   uploadedBy: UserId,
-  createdAt: S.optional(DateTime),
+  createdAt: S.optional(S.Date),
 });
 
 /**
@@ -62,8 +64,8 @@ export const DocumentSchema = S.Struct({
   size: FileSize,
   path: S.optional(FilePath),
   uploadedBy: UserId,
-  createdAt: S.optional(DateTime),
-  updatedAt: S.optional(DateTime),
+  createdAt: S.optional(S.Date),
+  updatedAt: S.optional(S.Date),
 });
 
 /**

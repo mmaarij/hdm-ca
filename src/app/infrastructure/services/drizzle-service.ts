@@ -47,3 +47,20 @@ export const getDb = Effect.gen(function* () {
   const service = yield* DrizzleService;
   return service.db;
 });
+
+/**
+ * Database delete result types
+ * Different database drivers return different result structures
+ */
+type DeleteResult = {
+  changes?: number; // Bun SQLite
+  rowCount?: number; // PostgreSQL/other drivers
+};
+
+/**
+ * Check if a delete operation affected any rows
+ */
+export const hasAffectedRows = (result: unknown): boolean => {
+  const deleteResult = result as DeleteResult;
+  return !!(deleteResult.changes || deleteResult.rowCount);
+};

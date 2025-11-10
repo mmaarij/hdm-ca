@@ -4,13 +4,16 @@ import {
   MetadataRepository,
   MetadataRepositoryTag,
 } from "../../domain/metedata/repository";
-import { DocumentMetadataEntity as DocumentMetadata, MetadataId } from "../../domain/metedata/entity";
+import {
+  DocumentMetadataEntity as DocumentMetadata,
+  MetadataId,
+} from "../../domain/metedata/entity";
 import {
   MetadataNotFoundError,
   MetadataAlreadyExistsError,
   MetadataConstraintError,
 } from "../../domain/metedata/errors";
-import { DrizzleService } from "../services/drizzle-service";
+import { DrizzleService, hasAffectedRows } from "../services/drizzle-service";
 import { documentMetadata } from "../models";
 import { MetadataMapper } from "../mappers/metadata.mapper";
 import { detectDbConstraint } from "../../domain/shared/base.repository";
@@ -161,7 +164,7 @@ export const MetadataRepositoryLive = Layer.effect(
             new MetadataConstraintError({ message: "Database error" }),
         }),
         Effect.flatMap((result) => {
-          if (!(result as any).changes && !(result as any).rowCount) {
+          if (!hasAffectedRows(result)) {
             return Effect.fail(
               new MetadataNotFoundError({
                 metadataId: id,

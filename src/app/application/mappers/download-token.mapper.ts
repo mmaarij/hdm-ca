@@ -14,6 +14,7 @@ import type {
 } from "../dtos/download-token/response.dto";
 import type { DownloadTokenEntity as DownloadToken } from "../../domain/download-token/entity";
 import type { DocumentVersionEntity as DocumentVersion } from "../../domain/document/entity";
+import { DateTimeHelpers } from "../../domain/refined/date-time";
 
 /**
  * Command to Domain Mappers
@@ -55,7 +56,7 @@ export const DownloadTokenResponseMapper = {
       ? token.versionId.value
       : undefined,
     downloadUrl: `${baseUrl}/download/${token.token}`,
-    expiresAt: token.expiresAt as any, // Branded Date type
+    expiresAt: DateTimeHelpers.fromDate(token.expiresAt),
   }),
 
   /**
@@ -87,7 +88,7 @@ export const DownloadTokenResponseMapper = {
       versionId: Option.isSome(token.versionId)
         ? token.versionId.value
         : undefined,
-      expiresAt: token.expiresAt as any, // Branded Date type
+      expiresAt: DateTimeHelpers.fromDate(token.expiresAt),
     };
   },
 

@@ -19,6 +19,7 @@ import type {
   MetadataKey,
   MetadataValue,
 } from "../../domain/metedata/value-object";
+import { DateTimeHelpers } from "../../domain/refined/date-time";
 
 /**
  * Command to Domain Mappers
@@ -63,7 +64,7 @@ export const MetadataResponseMapper = {
     documentId: metadata.documentId,
     key: metadata.key,
     value: metadata.value,
-    createdAt: metadata.createdAt as any, // Branded Date type
+    createdAt: DateTimeHelpers.fromDate(metadata.createdAt),
   }),
 
   /**

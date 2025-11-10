@@ -2,7 +2,6 @@ import { Schema as S } from "effect";
 import { UserId } from "../refined/uuid";
 import { EmailAddress } from "../refined/email";
 import { HashedPassword } from "../refined/password";
-import { DateTime } from "../refined/date-time";
 import { UserRole } from "./value-object";
 
 /**
@@ -10,6 +9,9 @@ import { UserRole } from "./value-object";
  *
  * Contains both entity schemas (for validation and encoding/decoding)
  * and specific use-case schemas (login, registration).
+ *
+ * Note: Entity schemas use S.Date for internal date representation.
+ * API DTOs use DateTime (DateFromString with branding) for JSON serialization.
  */
 
 // ============================================================================
@@ -24,8 +26,8 @@ export const UserSchema = S.Struct({
   email: EmailAddress,
   password: HashedPassword,
   role: UserRole,
-  createdAt: S.optional(DateTime),
-  updatedAt: S.optional(DateTime),
+  createdAt: S.optional(S.Date),
+  updatedAt: S.optional(S.Date),
 });
 
 /**
@@ -40,8 +42,8 @@ export const UserPublicSchema = S.Struct({
   id: UserId,
   email: EmailAddress,
   role: UserRole,
-  createdAt: S.optional(DateTime),
-  updatedAt: S.optional(DateTime),
+  createdAt: S.optional(S.Date),
+  updatedAt: S.optional(S.Date),
 });
 
 /**

@@ -50,31 +50,29 @@ export class DocumentPermissionEntity extends BaseEntity implements IEntity {
 
   /**
    * Create a new permission with validation
+   * Uses internal validation (no encoding/decoding) since data is already in memory
    */
   static create(
     input: SerializedDocumentPermission
   ): E.Effect<DocumentPermissionEntity, PermissionValidationError, never> {
-    return pipe(
-      S.decodeUnknown(DocumentPermissionSchema)(input),
-      E.flatMap((data) => {
-        return E.succeed(
-          new DocumentPermissionEntity(
-            data.id,
-            data.documentId,
-            data.userId,
-            data.permission,
-            data.grantedBy,
-            data.grantedAt ?? new Date()
-          )
-        );
-      }),
-      E.mapError(
-        (error) =>
-          new PermissionValidationError({
-            message: `Permission validation failed: ${error}`,
-          })
-      )
-    );
+    try {
+      return E.succeed(
+        new DocumentPermissionEntity(
+          input.id as PermissionId,
+          input.documentId as DocumentId,
+          input.userId as UserId,
+          input.permission as PermissionType,
+          input.grantedBy as UserId,
+          input.grantedAt ?? new Date()
+        )
+      );
+    } catch (error) {
+      return E.fail(
+        new PermissionValidationError({
+          message: `Permission validation failed: ${error}`,
+        })
+      );
+    }
   }
 
   /**

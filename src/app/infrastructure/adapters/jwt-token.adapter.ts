@@ -31,7 +31,8 @@ const makeJwtService = (secret: string, expiry: string): JwtPort => ({
   sign: (payload: JwtPayload): Effect.Effect<JwtSignResult, Error> =>
     Effect.try({
       try: () => {
-        const options: SignOptions = { expiresIn: expiry as any };
+        // Note: jwt library's SignOptions type is restrictive for expiresIn
+        // but accepts string format like "24h" at runtime
         const token = jwt.sign(
           {
             userId: payload.userId,
@@ -39,7 +40,7 @@ const makeJwtService = (secret: string, expiry: string): JwtPort => ({
             role: payload.role,
           },
           secret,
-          options
+          { expiresIn: expiry } as SignOptions
         );
         const expiresIn = parseExpiryToSeconds(expiry);
         return { token, expiresIn };

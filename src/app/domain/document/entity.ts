@@ -68,40 +68,36 @@ export class DocumentVersionEntity extends BaseEntity implements IEntity {
 
   /**
    * Create a new document version with validation
+   * Uses internal validation (no encoding/decoding) since data is already in memory
    */
   static create(
     input: SerializedDocumentVersion
   ): E.Effect<DocumentVersionEntity, DocumentValidationError, never> {
+    // Domain validation only - no schema decoding for internal data
     return pipe(
-      S.decodeUnknown(DocumentVersionSchema)(input),
-      E.flatMap((data) => {
-        // Domain validation
-        return pipe(
-          E.all([
-            DocumentGuards.guardFileSize(data.size),
-            DocumentGuards.guardMimeType(data.mimeType),
-            DocumentGuards.guardSafeFilename(data.filename),
-          ]),
-          E.flatMap(() =>
-            E.succeed(
-              new DocumentVersionEntity(
-                data.id,
-                data.documentId,
-                data.filename,
-                data.originalName,
-                data.mimeType,
-                data.size,
-                normalizeMaybe(data.path),
-                normalizeMaybe(data.contentRef),
-                normalizeMaybe(data.checksum),
-                data.versionNumber,
-                data.uploadedBy,
-                data.createdAt ?? new Date()
-              )
-            )
+      E.all([
+        DocumentGuards.guardFileSize(input.size as FileSize),
+        DocumentGuards.guardMimeType(input.mimeType as MimeType),
+        DocumentGuards.guardSafeFilename(input.filename as Filename),
+      ]),
+      E.flatMap(() =>
+        E.succeed(
+          new DocumentVersionEntity(
+            input.id as DocumentVersionId,
+            input.documentId as DocumentId,
+            input.filename as Filename,
+            input.originalName as Filename,
+            input.mimeType as MimeType,
+            input.size as FileSize,
+            normalizeMaybe(input.path as FilePath | undefined),
+            normalizeMaybe(input.contentRef as ContentRef | undefined),
+            normalizeMaybe(input.checksum as Checksum | undefined),
+            input.versionNumber as VersionNumber,
+            input.uploadedBy as UserId,
+            input.createdAt ?? new Date()
           )
-        );
-      }),
+        )
+      ),
       E.mapError(
         (error) =>
           new DocumentValidationError({
@@ -201,38 +197,34 @@ export class DocumentEntity extends BaseEntity implements IEntity {
 
   /**
    * Create a new document with validation
+   * Uses internal validation (no encoding/decoding) since data is already in memory
    */
   static create(
     input: SerializedDocument
   ): E.Effect<DocumentEntity, DocumentValidationError, never> {
+    // Domain validation only - no schema decoding for internal data
     return pipe(
-      S.decodeUnknown(DocumentSchema)(input),
-      E.flatMap((data) => {
-        // Domain validation
-        return pipe(
-          E.all([
-            DocumentGuards.guardFileSize(data.size),
-            DocumentGuards.guardMimeType(data.mimeType),
-            DocumentGuards.guardSafeFilename(data.filename),
-          ]),
-          E.flatMap(() =>
-            E.succeed(
-              new DocumentEntity(
-                data.id,
-                data.filename,
-                data.originalName,
-                data.mimeType,
-                data.size,
-                normalizeMaybe(data.path),
-                data.uploadedBy,
-                data.createdAt ?? new Date(),
-                data.updatedAt ?? new Date(),
-                [] // versions will be loaded separately or added via addVersion
-              )
-            )
+      E.all([
+        DocumentGuards.guardFileSize(input.size as FileSize),
+        DocumentGuards.guardMimeType(input.mimeType as MimeType),
+        DocumentGuards.guardSafeFilename(input.filename as Filename),
+      ]),
+      E.flatMap(() =>
+        E.succeed(
+          new DocumentEntity(
+            input.id as DocumentId,
+            input.filename as Filename,
+            input.originalName as Filename,
+            input.mimeType as MimeType,
+            input.size as FileSize,
+            normalizeMaybe(input.path as FilePath | undefined),
+            input.uploadedBy as UserId,
+            input.createdAt ?? new Date(),
+            input.updatedAt ?? new Date(),
+            [] // versions will be loaded separately or added via addVersion
           )
-        );
-      }),
+        )
+      ),
       E.mapError(
         (error) =>
           new DocumentValidationError({

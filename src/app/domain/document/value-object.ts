@@ -119,3 +119,38 @@ export const makeContentRef = (input: unknown) =>
   S.decodeUnknown(ContentRef)(input);
 export const makeChecksum = (input: unknown) =>
   S.decodeUnknown(Checksum)(input);
+
+/**
+ * Value Object Creation Helpers
+ *
+ * Create branded value objects from primitives without 'as any' casts.
+ * These are safe wrappers that cast after basic validation.
+ */
+export const ValueObjectHelpers = {
+  /** Create Filename from string, with fallback */
+  filename: (name: string | undefined | null): Filename =>
+    (name?.trim() || "untitled") as Filename,
+
+  /** Create MimeType from string, normalizing format */
+  mimeType: (type: string | undefined | null): MimeType => {
+    const normalized = (type || "application/octet-stream")
+      .split(";")[0]
+      .trim();
+    return normalized as MimeType;
+  },
+
+  /** Create FilePath from string */
+  filePath: (path: string): FilePath => path as FilePath,
+
+  /** Create FileSize from number */
+  fileSize: (size: number): FileSize => size as FileSize,
+
+  /** Create ContentRef from string */
+  contentRef: (ref: string): ContentRef => ref as ContentRef,
+
+  /** Create Checksum from string */
+  checksum: (hash: string): Checksum => hash as Checksum,
+
+  /** Create VersionNumber from number */
+  versionNumber: (num: number): VersionNumber => num as VersionNumber,
+} as const;

@@ -1,76 +1,51 @@
 import { Schema as S } from "effect";
 
 /**
- * Branded Date type used across the domain.
+ * Branded DateTime type with proper JSON encoding/decoding
+ *
+ * - Encoded form: ISO-8601 string for JSON serialization
+ * - Decoded form: Date object with "DateTime" brand
+ *
+ * When encoding to JSON, Date objects are converted to ISO strings.
+ * When decoding from JSON, ISO strings are converted to Date objects.
  */
-export const DateTime = S.Date.pipe(S.brand("DateTime"));
+export const DateTime = S.DateFromString.pipe(S.brand("DateTime"));
 export type DateTime = S.Schema.Type<typeof DateTime>;
 
 /**
- * ISO-8601 string <-> DateTime
+ * @deprecated Use DateTime directly - it already handles ISO strings
  */
-export const DateTimeIso = S.DateFromString.pipe(S.brand("DateTime"));
+export const DateTimeIso = DateTime;
 export type DateTimeIso = S.Schema.Type<typeof DateTimeIso>;
 
 /**
  * Epoch millis <-> DateTime
  */
 export const DateTimeEpoch = S.transform(S.Number, DateTime, {
-  decode: (epoch) => new Date(epoch),
-  encode: (value) => value,
-  strict: false,
+  strict: true,
+  decode: (epoch) => new Date(epoch).toISOString(),
+  encode: (dateStr) => new Date(dateStr).getTime(),
 });
 export type DateTimeEpoch = S.Schema.Type<typeof DateTimeEpoch>;
 
 /**
- * Accept Date | string | number → DateTime
+ * Runtime constructors for creating DateTime values
+ *
+ * These are for use in domain logic where you need to create DateTime values.
+ * Since DateTime is Date & Brand<"DateTime">, we create branded Date objects.
+ * The Schema handles encoding Date -> ISO string automatically when serializing to JSON.
  */
-export const DateTimeFromAny = S.transform(S.Unknown, DateTime, {
-  decode: (input) => {
-    if (input instanceof Date) return input;
-    if (typeof input === "string" || typeof input === "number")
-      return new Date(input);
-    throw new Error(`Cannot convert ${typeof input} to Date`);
-  },
-  encode: (value) => value,
-  strict: false,
-});
-export type DateTimeFromAny = S.Schema.Type<typeof DateTimeFromAny>;
+export const DateTimeHelpers = {
+  /** Get current date/time as branded DateTime */
+  now: (): DateTime => new Date() as DateTime,
 
-/**
- * Union transformer: string → DateTime
- * Use in DTOs to accept ISO-8601 strings and transform to branded DateTime
- */
-export const StringToDateTime = S.DateFromString.pipe(S.brand("DateTime"));
-export type StringToDateTime = S.Schema.Type<typeof StringToDateTime>;
+  /** Convert Date to branded DateTime */
+  fromDate: (date: Date): DateTime => date as DateTime,
 
-/**
- * Union transformer: number → DateTime
- * Use in DTOs to accept epoch timestamps and transform to branded DateTime
- */
-export const NumberToDateTime = S.transform(S.Number, DateTime, {
-  decode: (epoch) => new Date(epoch),
-  encode: (date) => date,
-  strict: false,
-});
-export type NumberToDateTime = S.Schema.Type<typeof NumberToDateTime>;
+  /** Convert ISO string to branded DateTime */
+  fromISOString: (iso: string): DateTime => new Date(iso) as DateTime,
 
-/**
- * Union transformer: string | number → DateTime
- * Use in DTOs to accept either ISO-8601 strings or epoch timestamps
- */
-export const StringOrNumberToDateTime = S.Union(
-  StringToDateTime,
-  NumberToDateTime
-);
-export type StringOrNumberToDateTime = S.Schema.Type<
-  typeof StringOrNumberToDateTime
->;
-
-/** Constructors */
-export const makeDateTimeFromIso = (input: unknown) =>
-  S.decodeUnknown(DateTimeIso)(input);
-export const makeDateTimeFromEpoch = (input: unknown) =>
-  S.decodeUnknown(DateTimeEpoch)(input);
-export const makeDateTimeFromAny = (input: unknown) =>
-  S.decodeUnknown(DateTimeFromAny)(input);
+  /** Convert timestamp to branded DateTime */
+  fromTimestamp: (timestamp: number): DateTime =>
+    new Date(timestamp) as DateTime,
+} as const;

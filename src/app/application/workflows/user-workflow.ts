@@ -21,6 +21,7 @@ import type { PasswordHasherPort } from "../ports/password-hasher.port";
 import type { JwtPort } from "../ports/jwt.port";
 import { makePassword, HashedPassword } from "../../domain/refined/password";
 import { loadEntity } from "../utils/effect-helpers";
+import { UuidGenerators } from "../../domain/refined/uuid";
 import type {
   RegisterUserInput,
   RegisterUserCommand,
@@ -42,6 +43,7 @@ import type {
   RegisterResponse,
   ListUsersResponse,
 } from "../dtos/user/response.dto";
+import * as UserResponseDTOs from "../dtos/user/response.dto";
 import type { UserId } from "../../domain/refined/uuid";
 import { UserResponseMapper } from "../mappers/user.mapper";
 
@@ -88,15 +90,15 @@ export const registerUser =
           Effect.flatMap(() => makePassword(command.password)),
           Effect.flatMap((password) => deps.passwordHasher.hash(password)),
           Effect.flatMap((hashedPassword) => {
-            const now = new Date().toISOString();
+            const now = new Date();
             return pipe(
               User.create({
-                id: uuidv4() as any,
+                id: UuidGenerators.userId(),
                 email: command.email,
                 password: hashedPassword as HashedPassword,
-                role: command.role ?? ("USER" as any),
-                createdAt: now as any,
-                updatedAt: now as any,
+                role: command.role ?? "USER",
+                createdAt: now,
+                updatedAt: now,
               }),
               Effect.flatMap((newUser) => deps.userRepo.save(newUser))
             );

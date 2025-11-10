@@ -54,29 +54,25 @@ export class DocumentMetadataEntity extends BaseEntity implements IEntity {
 
   /**
    * Create a new metadata entry with validation
+   * Uses internal validation (no encoding/decoding) since data is already in memory
    */
   static create(
     input: SerializedDocumentMetadata
   ): E.Effect<DocumentMetadataEntity, MetadataValidationError, never> {
+    // Domain validation - check if key is not reserved
     return pipe(
-      S.decodeUnknown(DocumentMetadataSchema)(input),
-      E.flatMap((data) => {
-        // Domain validation - check if key is not reserved
-        return pipe(
-          MetadataGuards.guardNotReservedKey(data.key),
-          E.flatMap(() =>
-            E.succeed(
-              new DocumentMetadataEntity(
-                data.id,
-                data.documentId,
-                data.key,
-                data.value,
-                data.createdAt ?? new Date()
-              )
-            )
+      MetadataGuards.guardNotReservedKey(input.key as MetadataKey),
+      E.flatMap(() =>
+        E.succeed(
+          new DocumentMetadataEntity(
+            input.id as MetadataId,
+            input.documentId as DocumentId,
+            input.key as MetadataKey,
+            input.value as MetadataValue,
+            input.createdAt ?? new Date()
           )
-        );
-      }),
+        )
+      ),
       E.mapError(
         (error) =>
           new MetadataValidationError({

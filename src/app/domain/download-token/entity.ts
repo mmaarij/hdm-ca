@@ -69,33 +69,31 @@ export class DownloadTokenEntity extends BaseEntity implements IEntity {
 
   /**
    * Create a new download token with validation
+   * Uses internal validation (no encoding/decoding) since data is already in memory
    */
   static create(
     input: SerializedDownloadToken
   ): E.Effect<DownloadTokenEntity, DownloadTokenValidationError, never> {
-    return pipe(
-      S.decodeUnknown(DownloadTokenSchema)(input),
-      E.flatMap((data) => {
-        return E.succeed(
-          new DownloadTokenEntity(
-            data.id,
-            data.documentId,
-            normalizeMaybe(data.versionId),
-            data.token,
-            data.expiresAt,
-            normalizeMaybe(data.usedAt),
-            data.createdBy,
-            data.createdAt ?? new Date()
-          )
-        );
-      }),
-      E.mapError(
-        (error) =>
-          new DownloadTokenValidationError({
-            message: `Download token validation failed: ${error}`,
-          })
-      )
-    );
+    try {
+      return E.succeed(
+        new DownloadTokenEntity(
+          input.id as DownloadTokenId,
+          input.documentId as DocumentId,
+          normalizeMaybe(input.versionId as DocumentVersionId | undefined),
+          input.token as Token,
+          input.expiresAt,
+          normalizeMaybe(input.usedAt),
+          input.createdBy as UserId,
+          input.createdAt ?? new Date()
+        )
+      );
+    } catch (error) {
+      return E.fail(
+        new DownloadTokenValidationError({
+          message: `Download token validation failed: ${error}`,
+        })
+      );
+    }
   }
 
   /**

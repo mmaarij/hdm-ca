@@ -45,7 +45,7 @@ export const RESERVED_METADATA_KEYS = [
  * Check if a key is reserved
  */
 export const isReservedKey = (key: string): boolean =>
-  RESERVED_METADATA_KEYS.includes(key as any);
+  (RESERVED_METADATA_KEYS as readonly string[]).includes(key);
 
 /**
  * Constructors
@@ -55,3 +55,16 @@ export const makeMetadataKey = (input: unknown) =>
 
 export const makeMetadataValue = (input: unknown) =>
   S.decodeUnknown(MetadataValue)(input);
+
+/**
+ * Metadata Value Object Creation Helpers
+ *
+ * Create branded metadata types from primitives without 'as any' casts.
+ */
+export const MetadataHelpers = {
+  /** Create MetadataKey from string */
+  key: (key: string): MetadataKey => key as MetadataKey,
+
+  /** Create MetadataValue from string */
+  value: (value: string): MetadataValue => value as MetadataValue,
+} as const;

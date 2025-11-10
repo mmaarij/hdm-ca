@@ -4,7 +4,7 @@
  * Helper functions for creating type-safe Elysia route handlers
  */
 
-import { Effect, Runtime, Layer } from "effect";
+import { Effect, Runtime, Layer, Schema as S } from "effect";
 import type { HttpErrorResponse } from "./error-mapper";
 import { mapErrorToStatus } from "./error-mapper";
 import {
@@ -18,12 +18,16 @@ import {
  * Executes an Effect within the provided runtime, handling both success and error cases.
  * Errors are automatically mapped to appropriate HTTP error responses.
  * Correlation IDs are extracted from request headers and propagated through the Effect.
+ *
+ * If a responseSchema is provided, the result will be encoded through the schema to ensure
+ * proper JSON serialization (e.g., Date objects become ISO strings).
  */
-export const runEffect = async <A, E, R>(
+export const runEffect = async <A, E, R, I = A>(
   effect: Effect.Effect<A, E, R>,
   runtime: Runtime.Runtime<R>,
-  headers?: Record<string, string | undefined>
-): Promise<A> => {
+  headers?: Record<string, string | undefined>,
+  responseSchema?: S.Schema<A, I, never>
+): Promise<A | I> => {
   // Extract correlation ID from headers if available
   const correlationId = headers
     ? extractCorrelationIdFromHeaders(headers)
@@ -39,8 +43,24 @@ export const runEffect = async <A, E, R>(
   );
 
   if (result._tag === "Left") {
-    const httpError = mapErrorToStatus(result.left as any);
+    // Error type E is unknown at this point, but mapErrorToStatus handles all domain errors
+    const httpError = mapErrorToStatus(result.left as Error);
     throw httpError;
+  }
+
+  // If schema provided, encode the result for proper JSON serialization
+  if (responseSchema) {
+    const encodeResult = await Runtime.runPromise(runtime)(
+      Effect.either(S.encode(responseSchema)(result.right))
+    );
+
+    if (encodeResult._tag === "Left") {
+      // Encoding failed - log and return raw result
+      console.error("[Encoding Error]", encodeResult.left);
+      return result.right;
+    }
+
+    return encodeResult.right;
   }
 
   return result.right;

@@ -29,7 +29,7 @@ export const isValidFileSize = (size: number): boolean =>
 export const isAllowedMimeType = (mimeType: string): boolean => {
   // Extract base MIME type (before any semicolon/parameters)
   const baseMimeType = mimeType.split(";")[0].trim().toLowerCase();
-  return ALLOWED_MIME_TYPES.includes(baseMimeType as any);
+  return (ALLOWED_MIME_TYPES as readonly string[]).includes(baseMimeType);
 };
 
 /**

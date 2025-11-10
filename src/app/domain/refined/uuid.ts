@@ -1,4 +1,5 @@
 import { Schema as S } from "effect";
+import { v4 as uuidv4 } from "uuid";
 
 /**
  * Shared UUID Schema 
@@ -97,3 +98,19 @@ export const makeWorkspaceIdSync = (input: unknown) =>
   S.decodeUnknownSync(WorkspaceId)(input);
 export const makeAccessPolicyIdSync = (input: unknown) =>
   S.decodeUnknownSync(AccessPolicyId)(input);
+
+/**
+ * UUID Generation Helpers
+ *
+ * Generate new branded UUIDs for entity creation.
+ * These wrap uuidv4() with proper type branding to avoid 'as any' casts.
+ */
+export const UuidGenerators = {
+  documentId: (): DocumentId => uuidv4() as DocumentId,
+  documentVersionId: (): DocumentVersionId => uuidv4() as DocumentVersionId,
+  userId: (): UserId => uuidv4() as UserId,
+  downloadTokenId: (): DownloadTokenId => uuidv4() as DownloadTokenId,
+  workspaceId: (): WorkspaceId => uuidv4() as WorkspaceId,
+  accessPolicyId: (): AccessPolicyId => uuidv4() as AccessPolicyId,
+  uuid: (): Uuid => uuidv4() as Uuid,
+} as const;

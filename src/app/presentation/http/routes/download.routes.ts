@@ -32,7 +32,12 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) => {
-                const requestBody = body as any;
+                // Elysia body is untyped for this endpoint
+                const requestBody = body as {
+                  documentId: string;
+                  versionId?: string;
+                  ttlMs?: number;
+                };
                 const commandData = {
                   documentId: requestBody.documentId,
                   versionId: requestBody.versionId,
@@ -54,7 +59,8 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          // withAuth wraps effect with JWT requirement, runtime provides dependencies
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime,
           reqHeaders
         );
@@ -73,7 +79,11 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
           )
         );
 
-        return runEffect(effect as any, runtime, reqHeaders);
+        return runEffect(
+          effect as Effect.Effect<any, any, R>,
+          runtime,
+          reqHeaders
+        );
       })
 
       /**
@@ -132,7 +142,11 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
           )
         );
 
-        return runEffect(effect as any, runtime, reqHeaders);
+        return runEffect(
+          effect as Effect.Effect<any, any, R>,
+          runtime,
+          reqHeaders
+        );
       })
 
       /**
@@ -156,7 +170,8 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          // withAuth wraps effect with JWT requirement
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime,
           reqHeaders
         );

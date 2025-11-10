@@ -22,7 +22,7 @@ import {
   DocumentConstraintError,
   DocumentInfrastructureError,
 } from "../../domain/document/errors";
-import { DrizzleService } from "../services/drizzle-service";
+import { DrizzleService, hasAffectedRows } from "../services/drizzle-service";
 import { documents, documentVersions, documentAudit } from "../models";
 import {
   DocumentMapper,
@@ -559,7 +559,7 @@ export const DocumentRepositoryLive = Layer.effect(
             }),
         }),
         Effect.flatMap((result) => {
-          if (!(result as any).changes && !(result as any).rowCount) {
+          if (!hasAffectedRows(result)) {
             return Effect.fail(
               new DocumentNotFoundError({
                 documentId: id,

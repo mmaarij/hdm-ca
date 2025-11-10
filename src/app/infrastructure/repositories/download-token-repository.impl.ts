@@ -1,5 +1,5 @@
 import { Effect, Option, Layer, pipe } from "effect";
-import { eq, lt } from "drizzle-orm";
+import { eq, exists, lt } from "drizzle-orm";
 import {
   DownloadTokenRepository,
   DownloadTokenRepositoryTag,
@@ -10,7 +10,7 @@ import {
   DownloadTokenNotFoundError,
   DownloadTokenConstraintError,
 } from "../../domain/download-token/errors";
-import { DrizzleService } from "../services/drizzle-service";
+import { DrizzleService, hasAffectedRows } from "../services/drizzle-service";
 import { downloadTokens } from "../models";
 import { DownloadTokenMapper } from "../mappers/download-token.mapper";
 import { detectDbConstraint } from "../../domain/shared/base.repository";
@@ -155,7 +155,7 @@ export const DownloadTokenRepositoryLive = Layer.effect(
             new DownloadTokenConstraintError({ message: "Database error" }),
         }),
         Effect.flatMap((result) => {
-          if (!(result as any).changes && !(result as any).rowCount) {
+          if (!hasAffectedRows(result)) {
             return Effect.fail(
               new DownloadTokenNotFoundError({
                 tokenId: id,
@@ -180,7 +180,13 @@ export const DownloadTokenRepositoryLive = Layer.effect(
               new DownloadTokenConstraintError({ message: "Database error" }),
           })
         ),
-        Effect.map((result) => (result as any).changes || 0)
+        Effect.map((result) => {
+          const deleteResult = result as unknown as {
+            changes?: number;
+            rowCount?: number;
+          };
+          return deleteResult.changes || deleteResult.rowCount || 0;
+        })
       );
 
     const deleteByDocument: DownloadTokenRepository["deleteByDocument"] = (

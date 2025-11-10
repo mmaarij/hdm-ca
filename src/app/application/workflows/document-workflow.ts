@@ -28,6 +28,9 @@ import {
   requireWritePermission,
   requireDeletePermission,
 } from "../../domain/permission/service";
+import { UuidGenerators } from "../../domain/refined/uuid";
+import { DateTimeHelpers } from "../../domain/refined/date-time";
+import { ValueObjectHelpers } from "../../domain/document/value-object";
 import type {
   UserId,
   DocumentId,
@@ -138,7 +141,7 @@ export const uploadDocument =
               )
             : pipe(
                 deps.documentRepo.findByFilenameAndUser(
-                  (command.file.name || "untitled") as any,
+                  ValueObjectHelpers.filename(command.file.name),
                   command.uploadedBy
                 ),
                 Effect.flatMap((existingDoc) =>
@@ -151,19 +154,24 @@ export const uploadDocument =
                       )
                     : pipe(
                         DocumentEntity.create({
-                          id: uuidv4() as any,
-                          filename: (command.file.name || "untitled") as any,
-                          originalName: (command.file.name ||
-                            "untitled") as any,
-                          mimeType: (
-                            command.file.type || "application/octet-stream"
-                          )
-                            .split(";")[0]
-                            .trim() as any,
-                          size: command.file.size as any,
+                          id: UuidGenerators.documentId(),
+                          filename: ValueObjectHelpers.filename(
+                            command.file.name
+                          ),
+                          originalName: ValueObjectHelpers.filename(
+                            command.file.name
+                          ),
+                          mimeType: ValueObjectHelpers.mimeType(
+                            command.file.type
+                          ),
+                          size: ValueObjectHelpers.fileSize(command.file.size),
                           uploadedBy: command.uploadedBy,
-                          createdAt: new Date().toISOString() as any,
-                          updatedAt: new Date().toISOString() as any,
+                          createdAt: DateTimeHelpers.fromISOString(
+                            new Date().toISOString()
+                          ),
+                          updatedAt: DateTimeHelpers.fromISOString(
+                            new Date().toISOString()
+                          ),
                         }),
                         Effect.map((document) => ({
                           document,
@@ -185,7 +193,7 @@ export const uploadDocument =
               Effect.succeed({
                 document,
                 isNewDocument,
-                tempVersionId: uuidv4() as any,
+                tempVersionId: UuidGenerators.documentVersionId(),
               })
             )
           ),
@@ -208,7 +216,7 @@ export const uploadDocument =
               ? pipe(
                   DocumentDomainServiceLive.validateNoDuplicateContent(
                     document.versions,
-                    storedFile.checksum as any
+                    ValueObjectHelpers.checksum(storedFile.checksum)
                   ),
                   Effect.map(() => ({ document, isNewDocument, storedFile }))
                 )
@@ -217,16 +225,16 @@ export const uploadDocument =
           Effect.map(({ document, isNewDocument, storedFile }) => {
             // Use the entity's addVersion method to add a new version
             const documentWithVersion = document.addVersion({
-              filename: storedFile.filename as any,
-              originalName: storedFile.originalName as any,
-              mimeType: (command.file.type || "application/octet-stream")
-                .split(";")[0]
-                .trim() as any,
-              size: command.file.size as any,
+              filename: ValueObjectHelpers.filename(storedFile.filename),
+              originalName: ValueObjectHelpers.filename(
+                storedFile.originalName
+              ),
+              mimeType: ValueObjectHelpers.mimeType(command.file.type),
+              size: ValueObjectHelpers.fileSize(command.file.size),
               uploadedBy: command.uploadedBy,
-              path: storedFile.path as any,
-              contentRef: storedFile.path as any,
-              checksum: storedFile.checksum as any,
+              path: ValueObjectHelpers.filePath(storedFile.path),
+              contentRef: ValueObjectHelpers.contentRef(storedFile.path),
+              checksum: ValueObjectHelpers.checksum(storedFile.checksum),
             });
             return { documentWithVersion, isNewDocument };
           }),

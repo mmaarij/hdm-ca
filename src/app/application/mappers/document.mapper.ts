@@ -25,6 +25,7 @@ import type {
   FilePath,
 } from "../../domain/document/value-object";
 import type { UserId } from "../../domain/refined/uuid";
+import { DateTimeHelpers } from "../../domain/refined/date-time";
 
 /**
  * Command to Domain Mappers
@@ -101,7 +102,7 @@ export const DocumentResponseMapper = {
     size: version.size,
     versionNumber: version.versionNumber,
     uploadedBy: version.uploadedBy,
-    createdAt: version.createdAt as any, // Branded Date type
+    createdAt: DateTimeHelpers.fromDate(version.createdAt),
   }),
 
   /**
@@ -121,8 +122,8 @@ export const DocumentResponseMapper = {
           mimeType: document.mimeType,
           size: document.size,
           uploadedBy: document.uploadedBy,
-          createdAt: document.createdAt as any, // Branded Date type
-          updatedAt: document.updatedAt as any, // Branded Date type
+          createdAt: DateTimeHelpers.fromDate(document.createdAt),
+          updatedAt: DateTimeHelpers.fromDate(document.updatedAt),
         }),
         onSome: (latestVersion) => ({
           id: document.id,
@@ -131,8 +132,8 @@ export const DocumentResponseMapper = {
           mimeType: latestVersion.mimeType,
           size: latestVersion.size,
           uploadedBy: document.uploadedBy,
-          createdAt: document.createdAt as any, // Branded Date type
-          updatedAt: document.updatedAt as any, // Branded Date type
+          createdAt: DateTimeHelpers.fromDate(document.createdAt),
+          updatedAt: DateTimeHelpers.fromDate(document.updatedAt),
         }),
       })
     );

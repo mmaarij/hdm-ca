@@ -11,6 +11,7 @@ import type { Runtime } from "effect";
 import { DocumentWorkflowTag } from "../../../application/workflows/document-workflow";
 import { runEffect } from "../utils/handler";
 import { withAuth, requireAuth } from "../middleware/auth.middleware";
+import type { DocumentId, UserId } from "../../../domain/refined/uuid";
 
 /**
  * Create document routes
@@ -34,7 +35,8 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               pipe(
                 requireAuth(),
                 Effect.flatMap((auth) => {
-                  const formData = body as any;
+                  // Elysia body for multipart/form-data
+                  const formData = body as { file?: File; documentId?: string };
                   const file = formData.file;
 
                   if (!file) {
@@ -54,7 +56,11 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
           );
 
           return runEffect(
-            withAuth(effect, headers.authorization) as any,
+            withAuth(effect, headers.authorization) as Effect.Effect<
+              any,
+              any,
+              R
+            >,
             runtime
           );
         },
@@ -87,7 +93,7 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -114,7 +120,7 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -131,8 +137,8 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 documentWorkflow.listDocumentVersions(
-                  params.documentId as any,
-                  auth.userId as any
+                  params.documentId as DocumentId,
+                  auth.userId as UserId
                 )
               )
             )
@@ -140,7 +146,7 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -166,7 +172,7 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -192,7 +198,7 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -207,20 +213,25 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
           Effect.flatMap((documentWorkflow) =>
             pipe(
               requireAuth(),
-              Effect.flatMap((auth) =>
-                documentWorkflow.searchDocuments({
-                  query: (query as any).query,
-                  page: (query as any).page,
-                  limit: (query as any).limit,
+              Effect.flatMap((auth) => {
+                const searchQuery = query as {
+                  query?: string;
+                  page?: number;
+                  limit?: number;
+                };
+                return documentWorkflow.searchDocuments({
+                  query: searchQuery.query || "",
+                  page: searchQuery.page,
+                  limit: searchQuery.limit,
                   userId: auth.userId,
-                })
-              )
+                });
+              })
             )
           )
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })
@@ -247,7 +258,7 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         );
 
         return runEffect(
-          withAuth(effect, headers.authorization) as any,
+          withAuth(effect, headers.authorization) as Effect.Effect<any, any, R>,
           runtime
         );
       })

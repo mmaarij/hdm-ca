@@ -68,13 +68,15 @@ export const UserResponseMapper = {
   /**
    * Map User entity to UserResponse DTO
    * Excludes password field
+   *
+   * Dates are passed as Date objects; DateTime schema handles Date -> ISO string encoding
    */
   toUserResponse: (user: User | UserPublic): UserResponse => ({
     id: user.id,
     email: user.email,
     role: user.role,
-    createdAt: user.createdAt as any, // Branded Date type
-    updatedAt: user.updatedAt as any, // Branded Date type
+    createdAt: user.createdAt as any,
+    updatedAt: user.updatedAt as any,
   }),
 
   /**

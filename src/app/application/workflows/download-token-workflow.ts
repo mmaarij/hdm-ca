@@ -24,7 +24,14 @@ import {
   requireReadPermission,
 } from "../../domain/permission/service";
 import { loadEntity } from "../utils/effect-helpers";
-import type { UserId, DocumentId } from "../../domain/refined/uuid";
+import { UuidGenerators } from "../../domain/refined/uuid";
+import { DateTimeHelpers } from "../../domain/refined/date-time";
+import { TokenHelpers } from "../../domain/download-token/value-object";
+import type {
+  UserId,
+  DocumentId,
+  DocumentVersionId,
+} from "../../domain/refined/uuid";
 import type { Token } from "../../domain/download-token/value-object";
 import { DownloadTokenEntity as DownloadToken } from "../../domain/download-token/entity";
 import { DocumentEntity as Document } from "../../domain/document/entity";
@@ -110,12 +117,12 @@ export const generateDownloadLink =
             )
           ),
           Effect.flatMap(({ document, user }) => {
-            const versionId =
+            const versionId: DocumentVersionId | undefined =
               command.versionId ??
               pipe(
                 document.getLatestVersion(),
                 Option.match({
-                  onNone: () => undefined as any,
+                  onNone: () => undefined,
                   onSome: (version) => version.id,
                 })
               );
@@ -138,13 +145,17 @@ export const generateDownloadLink =
 
             return pipe(
               DownloadToken.create({
-                id: uuidv4() as any,
+                id: UuidGenerators.downloadTokenId(),
                 documentId: command.documentId,
                 versionId,
-                token: randomBytes(32).toString("base64url") as any,
-                expiresAt: expiresAt.toISOString() as any,
+                token: TokenHelpers.generate(),
+                expiresAt: DateTimeHelpers.fromISOString(
+                  expiresAt.toISOString()
+                ),
                 createdBy: command.userId,
-                createdAt: new Date().toISOString() as any,
+                createdAt: DateTimeHelpers.fromISOString(
+                  new Date().toISOString()
+                ),
               }),
               Effect.flatMap((newToken) =>
                 pipe(
