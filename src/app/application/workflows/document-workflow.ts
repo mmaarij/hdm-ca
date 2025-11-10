@@ -494,7 +494,15 @@ export const listDocuments =
     input: ListDocumentsInput
   ): Effect.Effect<PaginatedDocumentsResponse, Error> =>
     pipe(
-      S.decodeUnknown(DocumentDTOs.ListDocumentsQuery)(input),
+      // First decode Input (string -> number transformation)
+      S.decodeUnknown(DocumentDTOs.ListDocumentsInput)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for listDocuments: ${e}`)
+      ),
+      // Then transform to Query (string -> branded UserId)
+      Effect.flatMap((parsed) =>
+        S.decodeUnknown(DocumentDTOs.ListDocumentsQuery)(parsed)
+      ),
       Effect.mapError(
         (e) => new Error(`Invalid input for listDocuments: ${e}`)
       ),
@@ -549,9 +557,17 @@ export const listAllDocuments =
     input: ListAllDocumentsInput
   ): Effect.Effect<PaginatedDocumentsResponse, ForbiddenError | Error> =>
     pipe(
-      S.decodeUnknown(DocumentDTOs.ListAllDocumentsQuery)(input),
+      // Step 1: Decode Input schema (transforms string → number for query params)
+      S.decodeUnknown(DocumentDTOs.ListAllDocumentsInput)(input),
       Effect.mapError(
         (e) => new Error(`Invalid input for listAllDocuments: ${e}`)
+      ),
+      // Step 2: Decode Query schema (brands userId)
+      Effect.flatMap((parsed) =>
+        S.decodeUnknown(DocumentDTOs.ListAllDocumentsQuery)(parsed)
+      ),
+      Effect.mapError(
+        (e) => new Error(`Invalid query for listAllDocuments: ${e}`)
       ),
       Effect.flatMap((query) =>
         pipe(
@@ -608,9 +624,17 @@ export const searchDocuments =
     input: SearchDocumentsInput
   ): Effect.Effect<SearchDocumentsResponse, Error> =>
     pipe(
-      S.decodeUnknown(DocumentDTOs.SearchDocumentsQuery)(input),
+      // Step 1: Decode Input schema (transforms string → number for query params)
+      S.decodeUnknown(DocumentDTOs.SearchDocumentsInput)(input),
       Effect.mapError(
         (e) => new Error(`Invalid input for searchDocuments: ${e}`)
+      ),
+      // Step 2: Decode Query schema (brands userId and query string)
+      Effect.flatMap((parsed) =>
+        S.decodeUnknown(DocumentDTOs.SearchDocumentsQuery)(parsed)
+      ),
+      Effect.mapError(
+        (e) => new Error(`Invalid query for searchDocuments: ${e}`)
       ),
       Effect.flatMap((query) =>
         pipe(

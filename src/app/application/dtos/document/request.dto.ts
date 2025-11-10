@@ -96,11 +96,14 @@ export type GetDocumentVersionQuery = S.Schema.Type<
 
 /**
  * List Documents Input (raw from API)
+ * Query parameters come as strings from URLs
  */
 export const ListDocumentsInput = S.Struct({
   userId: S.String,
-  page: S.optional(S.Number.pipe(S.positive())),
-  limit: S.optional(S.Number.pipe(S.positive(), S.lessThanOrEqualTo(100))),
+  page: S.optional(S.NumberFromString.pipe(S.positive())),
+  limit: S.optional(
+    S.NumberFromString.pipe(S.positive(), S.lessThanOrEqualTo(100))
+  ),
 });
 
 export type ListDocumentsInput = S.Schema.Type<typeof ListDocumentsInput>;
@@ -118,11 +121,14 @@ export type ListDocumentsQuery = S.Schema.Type<typeof ListDocumentsQuery>;
 
 /**
  * List All Documents Input (raw from API, Admin)
+ * Query parameters come as strings from URLs
  */
 export const ListAllDocumentsInput = S.Struct({
   userId: S.String,
-  page: S.optional(S.Number.pipe(S.positive())),
-  limit: S.optional(S.Number.pipe(S.positive(), S.lessThanOrEqualTo(100))),
+  page: S.optional(S.NumberFromString.pipe(S.positive())),
+  limit: S.optional(
+    S.NumberFromString.pipe(S.positive(), S.lessThanOrEqualTo(100))
+  ),
 });
 
 export type ListAllDocumentsInput = S.Schema.Type<typeof ListAllDocumentsInput>;
@@ -140,12 +146,15 @@ export type ListAllDocumentsQuery = S.Schema.Type<typeof ListAllDocumentsQuery>;
 
 /**
  * Search Documents Input (raw from API)
+ * Query parameters come as strings from URLs
  */
 export const SearchDocumentsInput = S.Struct({
   query: S.String.pipe(S.minLength(1)),
   userId: S.String,
-  page: S.optional(S.Number.pipe(S.positive())),
-  limit: S.optional(S.Number.pipe(S.positive(), S.lessThanOrEqualTo(100))),
+  page: S.optional(S.NumberFromString.pipe(S.positive())),
+  limit: S.optional(
+    S.NumberFromString.pipe(S.positive(), S.lessThanOrEqualTo(100))
+  ),
 });
 
 export type SearchDocumentsInput = S.Schema.Type<typeof SearchDocumentsInput>;
