@@ -6,7 +6,7 @@
  * No Effect.gen usage - pure monadic composition with pipe.
  */
 
-import { Effect, Option, pipe } from "effect";
+import { Effect, Option, pipe, Schema as S } from "effect";
 import { v4 as uuidv4 } from "uuid";
 import type { DocumentRepository } from "../../domain/document/repository";
 import type { UserRepository } from "../../domain/user/repository";
@@ -35,14 +35,22 @@ import type {
 } from "../../domain/refined/uuid";
 import type { StoragePort } from "../ports/storage.port";
 import type {
+  UploadDocumentInput,
   UploadDocumentCommand,
+  GetDocumentInput,
   GetDocumentQuery,
+  ListDocumentsInput,
   ListDocumentsQuery,
+  ListAllDocumentsInput,
   ListAllDocumentsQuery,
+  SearchDocumentsInput,
   SearchDocumentsQuery,
+  DeleteDocumentInput,
   DeleteDocumentCommand,
+  GetDocumentVersionInput,
   GetDocumentVersionQuery,
 } from "../dtos/document/request.dto";
+import * as DocumentDTOs from "../dtos/document/request.dto";
 import type {
   UploadDocumentResponse,
   DocumentWithVersionResponse,
@@ -71,182 +79,192 @@ export interface DocumentWorkflowDeps {
  */
 export const uploadDocument =
   (deps: DocumentWorkflowDeps) =>
-  (
-    command: UploadDocumentCommand
-  ): Effect.Effect<UploadDocumentResponse, Error> =>
+  (input: UploadDocumentInput): Effect.Effect<UploadDocumentResponse, Error> =>
     pipe(
-      // Check if updating existing document or creating new
-      command.documentId
-        ? pipe(
-            deps.documentRepo.findById(command.documentId),
-            Effect.flatMap(
-              Option.match({
-                onNone: () =>
-                  Effect.fail(
-                    new NotFoundError({
-                      entityType: "Document",
-                      id: command.documentId!,
-                      message: `Document with ID ${command.documentId} not found`,
-                    })
-                  ),
-                onSome: (doc: DocumentEntity) =>
-                  pipe(
-                    Effect.all({
-                      user: pipe(
-                        deps.userRepo.findById(command.uploadedBy),
-                        Effect.flatMap(
-                          Option.match({
-                            onNone: () =>
-                              Effect.fail(
-                                new NotFoundError({
-                                  entityType: "User",
-                                  id: command.uploadedBy,
-                                })
-                              ),
-                            onSome: Effect.succeed,
-                          })
+      S.decodeUnknown(DocumentDTOs.UploadDocumentCommand)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for uploadDocument: ${e}`)
+      ),
+      Effect.flatMap((command) =>
+        pipe(
+          // Check if updating existing document or creating new
+          command.documentId
+            ? pipe(
+                deps.documentRepo.findById(command.documentId),
+                Effect.flatMap(
+                  Option.match({
+                    onNone: () =>
+                      Effect.fail(
+                        new NotFoundError({
+                          entityType: "Document",
+                          id: command.documentId!,
+                          message: `Document with ID ${command.documentId} not found`,
+                        })
+                      ),
+                    onSome: (doc: DocumentEntity) =>
+                      pipe(
+                        Effect.all({
+                          user: pipe(
+                            deps.userRepo.findById(command.uploadedBy),
+                            Effect.flatMap(
+                              Option.match({
+                                onNone: () =>
+                                  Effect.fail(
+                                    new NotFoundError({
+                                      entityType: "User",
+                                      id: command.uploadedBy,
+                                    })
+                                  ),
+                                onSome: Effect.succeed,
+                              })
+                            )
+                          ),
+                          permissions: deps.permissionRepo.findByDocument(
+                            command.documentId!
+                          ),
+                        }),
+                        Effect.flatMap(({ user, permissions }) =>
+                          pipe(
+                            requireWritePermission(user, doc, permissions),
+                            Effect.map(() => ({
+                              document: doc,
+                              isNewDocument: false,
+                            }))
+                          )
                         )
                       ),
-                      permissions: deps.permissionRepo.findByDocument(
-                        command.documentId!
-                      ),
-                    }),
-                    Effect.flatMap(({ user, permissions }) =>
-                      pipe(
-                        requireWritePermission(user, doc, permissions),
-                        Effect.map(() => ({
-                          document: doc,
-                          isNewDocument: false,
-                        }))
-                      )
-                    )
-                  ),
-              })
-            )
-          )
-        : pipe(
-            deps.documentRepo.findByFilenameAndUser(
-              (command.file.name || "untitled") as any,
-              command.uploadedBy
-            ),
-            Effect.flatMap((existingDoc) =>
-              Option.isSome(existingDoc)
-                ? Effect.fail(
-                    new DuplicateDocumentError({
-                      message: `A document with filename '${command.file.name}' already exists`,
-                      checksum: "",
-                    })
-                  )
-                : pipe(
-                    DocumentEntity.create({
-                      id: uuidv4() as any,
-                      filename: (command.file.name || "untitled") as any,
-                      originalName: (command.file.name || "untitled") as any,
-                      mimeType: (
-                        command.file.type || "application/octet-stream"
-                      )
-                        .split(";")[0]
-                        .trim() as any,
-                      size: command.file.size as any,
-                      uploadedBy: command.uploadedBy,
-                      createdAt: new Date().toISOString() as any,
-                      updatedAt: new Date().toISOString() as any,
-                    }),
-                    Effect.map((document) => ({
-                      document,
-                      isNewDocument: true,
-                    })),
-                    Effect.mapError(
-                      (e) =>
+                  })
+                )
+              )
+            : pipe(
+                deps.documentRepo.findByFilenameAndUser(
+                  (command.file.name || "untitled") as any,
+                  command.uploadedBy
+                ),
+                Effect.flatMap((existingDoc) =>
+                  Option.isSome(existingDoc)
+                    ? Effect.fail(
                         new DuplicateDocumentError({
-                          message: `Failed to create document: ${e.message}`,
+                          message: `A document with filename '${command.file.name}' already exists`,
                           checksum: "",
                         })
-                    )
-                  )
+                      )
+                    : pipe(
+                        DocumentEntity.create({
+                          id: uuidv4() as any,
+                          filename: (command.file.name || "untitled") as any,
+                          originalName: (command.file.name ||
+                            "untitled") as any,
+                          mimeType: (
+                            command.file.type || "application/octet-stream"
+                          )
+                            .split(";")[0]
+                            .trim() as any,
+                          size: command.file.size as any,
+                          uploadedBy: command.uploadedBy,
+                          createdAt: new Date().toISOString() as any,
+                          updatedAt: new Date().toISOString() as any,
+                        }),
+                        Effect.map((document) => ({
+                          document,
+                          isNewDocument: true,
+                        })),
+                        Effect.mapError(
+                          (e) =>
+                            new DuplicateDocumentError({
+                              message: `Failed to create document: ${e.message}`,
+                              checksum: "",
+                            })
+                        )
+                      )
+                )
+              ),
+          Effect.flatMap(({ document, isNewDocument }) =>
+            pipe(
+              // Generate temporary version ID for storage
+              Effect.succeed({
+                document,
+                isNewDocument,
+                tempVersionId: uuidv4() as any,
+              })
             )
           ),
-      Effect.flatMap(({ document, isNewDocument }) =>
-        pipe(
-          // Generate temporary version ID for storage
-          Effect.succeed({
-            document,
-            isNewDocument,
-            tempVersionId: uuidv4() as any,
+          Effect.flatMap(({ document, isNewDocument, tempVersionId }) =>
+            pipe(
+              deps.storageService.storeUploadedFile(
+                command.file,
+                document.id,
+                tempVersionId
+              ),
+              Effect.map((storedFile) => ({
+                document,
+                isNewDocument,
+                storedFile,
+              }))
+            )
+          ),
+          Effect.flatMap(({ document, isNewDocument, storedFile }) =>
+            !isNewDocument && storedFile.checksum
+              ? pipe(
+                  DocumentDomainServiceLive.validateNoDuplicateContent(
+                    document.versions,
+                    storedFile.checksum as any
+                  ),
+                  Effect.map(() => ({ document, isNewDocument, storedFile }))
+                )
+              : Effect.succeed({ document, isNewDocument, storedFile })
+          ),
+          Effect.map(({ document, isNewDocument, storedFile }) => {
+            // Use the entity's addVersion method to add a new version
+            const documentWithVersion = document.addVersion({
+              filename: storedFile.filename as any,
+              originalName: storedFile.originalName as any,
+              mimeType: (command.file.type || "application/octet-stream")
+                .split(";")[0]
+                .trim() as any,
+              size: command.file.size as any,
+              uploadedBy: command.uploadedBy,
+              path: storedFile.path as any,
+              contentRef: storedFile.path as any,
+              checksum: storedFile.checksum as any,
+            });
+            return { documentWithVersion, isNewDocument };
+          }),
+          Effect.flatMap(({ documentWithVersion, isNewDocument }) =>
+            pipe(
+              deps.documentRepo.save(documentWithVersion),
+              Effect.map((savedDocument) => ({ savedDocument, isNewDocument }))
+            )
+          ),
+          Effect.tap(({ savedDocument, isNewDocument }) => {
+            // Use the entity's getLatestVersion method
+            const latestVersionOpt = savedDocument.getLatestVersion();
+            const latestVersion = Option.getOrThrow(latestVersionOpt);
+            return deps.documentRepo.addAudit(
+              savedDocument.id,
+              isNewDocument ? "created" : "new_version",
+              command.uploadedBy,
+              Option.some(`Version ${latestVersion.versionNumber} uploaded`)
+            );
+          }),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map(({ savedDocument }) => {
+            // Use the entity's getLatestVersion method
+            const latestVersionOpt = savedDocument.getLatestVersion();
+            const latestVersion = Option.getOrThrow(latestVersionOpt);
+
+            return {
+              documentId: savedDocument.id,
+              versionId: latestVersion.id,
+              document:
+                DocumentResponseMapper.toDocumentResponse(savedDocument),
+              version: DocumentResponseMapper.toVersionResponse(latestVersion),
+            };
           })
         )
-      ),
-      Effect.flatMap(({ document, isNewDocument, tempVersionId }) =>
-        pipe(
-          deps.storageService.storeUploadedFile(
-            command.file,
-            document.id,
-            tempVersionId
-          ),
-          Effect.map((storedFile) => ({
-            document,
-            isNewDocument,
-            storedFile,
-          }))
-        )
-      ),
-      Effect.flatMap(({ document, isNewDocument, storedFile }) =>
-        !isNewDocument && storedFile.checksum
-          ? pipe(
-              DocumentDomainServiceLive.validateNoDuplicateContent(
-                document.versions,
-                storedFile.checksum as any
-              ),
-              Effect.map(() => ({ document, isNewDocument, storedFile }))
-            )
-          : Effect.succeed({ document, isNewDocument, storedFile })
-      ),
-      Effect.map(({ document, isNewDocument, storedFile }) => {
-        // Use the entity's addVersion method to add a new version
-        const documentWithVersion = document.addVersion({
-          filename: storedFile.filename as any,
-          originalName: storedFile.originalName as any,
-          mimeType: (command.file.type || "application/octet-stream")
-            .split(";")[0]
-            .trim() as any,
-          size: command.file.size as any,
-          uploadedBy: command.uploadedBy,
-          path: storedFile.path as any,
-          contentRef: storedFile.path as any,
-          checksum: storedFile.checksum as any,
-        });
-        return { documentWithVersion, isNewDocument };
-      }),
-      Effect.flatMap(({ documentWithVersion, isNewDocument }) =>
-        pipe(
-          deps.documentRepo.save(documentWithVersion),
-          Effect.map((savedDocument) => ({ savedDocument, isNewDocument }))
-        )
-      ),
-      Effect.tap(({ savedDocument, isNewDocument }) => {
-        // Use the entity's getLatestVersion method
-        const latestVersionOpt = savedDocument.getLatestVersion();
-        const latestVersion = Option.getOrThrow(latestVersionOpt);
-        return deps.documentRepo.addAudit(
-          savedDocument.id,
-          isNewDocument ? "created" : "new_version",
-          command.uploadedBy,
-          Option.some(`Version ${latestVersion.versionNumber} uploaded`)
-        );
-      }),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e)))),
-      Effect.map(({ savedDocument }) => {
-        // Use the entity's getLatestVersion method
-        const latestVersionOpt = savedDocument.getLatestVersion();
-        const latestVersion = Option.getOrThrow(latestVersionOpt);
-
-        return {
-          documentId: savedDocument.id,
-          versionId: latestVersion.id,
-          document: DocumentResponseMapper.toDocumentResponse(savedDocument),
-          version: DocumentResponseMapper.toVersionResponse(latestVersion),
-        };
-      })
+      )
     );
 
 /**
@@ -255,63 +273,71 @@ export const uploadDocument =
 export const getDocument =
   (deps: DocumentWorkflowDeps) =>
   (
-    query: GetDocumentQuery
+    input: GetDocumentInput
   ): Effect.Effect<
     DocumentWithVersionResponse,
     NotFoundError | InsufficientPermissionError | Error
   > =>
     pipe(
-      Effect.all({
-        document: pipe(
-          deps.documentRepo.findById(query.documentId),
-          Effect.flatMap(
-            Option.match({
-              onNone: () =>
-                Effect.fail(
-                  new NotFoundError({
-                    entityType: "Document",
-                    id: query.documentId,
-                  })
-                ),
-              onSome: Effect.succeed,
-            })
-          )
-        ),
-        user: pipe(
-          deps.userRepo.findById(query.userId),
-          Effect.flatMap(
-            Option.match({
-              onNone: () =>
-                Effect.fail(
-                  new NotFoundError({
-                    entityType: "User",
-                    id: query.userId,
-                  })
-                ),
-              onSome: Effect.succeed,
-            })
-          )
-        ),
-        permissions: deps.permissionRepo.findByDocument(query.documentId),
-      }),
-      Effect.flatMap(({ document, user, permissions }) =>
+      S.decodeUnknown(DocumentDTOs.GetDocumentQuery)(input),
+      Effect.mapError((e) => new Error(`Invalid input for getDocument: ${e}`)),
+      Effect.flatMap((query) =>
         pipe(
-          requireReadPermission(user, document, permissions),
-          Effect.map(() => document)
-        )
-      ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e)))),
-      Effect.map((document) => {
-        // Use the entity's getLatestVersion method
-        const latestVersionOpt = document.getLatestVersion();
-        const latestVersion = Option.getOrThrow(latestVersionOpt);
+          Effect.all({
+            document: pipe(
+              deps.documentRepo.findById(query.documentId),
+              Effect.flatMap(
+                Option.match({
+                  onNone: () =>
+                    Effect.fail(
+                      new NotFoundError({
+                        entityType: "Document",
+                        id: query.documentId,
+                      })
+                    ),
+                  onSome: Effect.succeed,
+                })
+              )
+            ),
+            user: pipe(
+              deps.userRepo.findById(query.userId),
+              Effect.flatMap(
+                Option.match({
+                  onNone: () =>
+                    Effect.fail(
+                      new NotFoundError({
+                        entityType: "User",
+                        id: query.userId,
+                      })
+                    ),
+                  onSome: Effect.succeed,
+                })
+              )
+            ),
+            permissions: deps.permissionRepo.findByDocument(query.documentId),
+          }),
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireReadPermission(user, document, permissions),
+              Effect.map(() => document)
+            )
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map((document) => {
+            // Use the entity's getLatestVersion method
+            const latestVersionOpt = document.getLatestVersion();
+            const latestVersion = Option.getOrThrow(latestVersionOpt);
 
-        return {
-          document: DocumentResponseMapper.toDocumentResponse(document),
-          latestVersion:
-            DocumentResponseMapper.toVersionResponse(latestVersion),
-        };
-      })
+            return {
+              document: DocumentResponseMapper.toDocumentResponse(document),
+              latestVersion:
+                DocumentResponseMapper.toVersionResponse(latestVersion),
+            };
+          })
+        )
+      )
     );
 
 /**
@@ -320,65 +346,77 @@ export const getDocument =
 export const getDocumentVersion =
   (deps: DocumentWorkflowDeps) =>
   (
-    query: GetDocumentVersionQuery
+    input: GetDocumentVersionInput
   ): Effect.Effect<
     DocumentVersionResponse,
     NotFoundError | InsufficientPermissionError | Error
   > =>
     pipe(
-      Effect.all({
-        document: pipe(
-          deps.documentRepo.findById(query.documentId),
-          Effect.flatMap(
-            Option.match({
-              onNone: () =>
-                Effect.fail(
-                  new NotFoundError({
-                    entityType: "Document",
-                    id: query.documentId,
-                  })
-                ),
-              onSome: Effect.succeed,
-            })
-          )
-        ),
-        user: pipe(
-          deps.userRepo.findById(query.userId),
-          Effect.flatMap(
-            Option.match({
-              onNone: () =>
-                Effect.fail(
-                  new NotFoundError({
-                    entityType: "User",
-                    id: query.userId,
-                  })
-                ),
-              onSome: Effect.succeed,
-            })
-          )
-        ),
-        permissions: deps.permissionRepo.findByDocument(query.documentId),
-      }),
-      Effect.flatMap(({ document, user, permissions }) =>
-        pipe(
-          requireReadPermission(user, document, permissions),
-          Effect.flatMap(() => {
-            const version = document.versions.find(
-              (v) => v.id === query.versionId
-            );
-            return version
-              ? Effect.succeed(version)
-              : Effect.fail(
-                  new NotFoundError({
-                    entityType: "DocumentVersion",
-                    id: query.versionId,
-                  })
-                );
-          })
-        )
+      S.decodeUnknown(DocumentDTOs.GetDocumentVersionQuery)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for getDocumentVersion: ${e}`)
       ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e)))),
-      Effect.map((version) => DocumentResponseMapper.toVersionResponse(version))
+      Effect.flatMap((query) =>
+        pipe(
+          Effect.all({
+            document: pipe(
+              deps.documentRepo.findById(query.documentId),
+              Effect.flatMap(
+                Option.match({
+                  onNone: () =>
+                    Effect.fail(
+                      new NotFoundError({
+                        entityType: "Document",
+                        id: query.documentId,
+                      })
+                    ),
+                  onSome: Effect.succeed,
+                })
+              )
+            ),
+            user: pipe(
+              deps.userRepo.findById(query.userId),
+              Effect.flatMap(
+                Option.match({
+                  onNone: () =>
+                    Effect.fail(
+                      new NotFoundError({
+                        entityType: "User",
+                        id: query.userId,
+                      })
+                    ),
+                  onSome: Effect.succeed,
+                })
+              )
+            ),
+            permissions: deps.permissionRepo.findByDocument(query.documentId),
+          }),
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireReadPermission(user, document, permissions),
+              Effect.flatMap(() => {
+                const version = document.versions.find(
+                  (v) => v.id === query.versionId
+                );
+                return version
+                  ? Effect.succeed(version)
+                  : Effect.fail(
+                      new NotFoundError({
+                        entityType: "DocumentVersion",
+                        id: query.versionId,
+                      })
+                    );
+              })
+            )
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          ),
+          Effect.map((version) =>
+            DocumentResponseMapper.toVersionResponse(version)
+          )
+        )
+      )
     );
 
 /**
@@ -445,69 +483,31 @@ export const listDocumentVersions =
 export const listDocuments =
   (deps: DocumentWorkflowDeps) =>
   (
-    query: ListDocumentsQuery
+    input: ListDocumentsInput
   ): Effect.Effect<PaginatedDocumentsResponse, Error> =>
     pipe(
-      deps.userRepo.findById(query.userId),
-      Effect.flatMap(
-        Option.match({
-          onNone: () =>
-            Effect.succeed({
-              documents: [],
-              total: 0,
-              page: query.page ?? 1,
-              limit: query.limit ?? 20,
-              totalPages: 0,
-              hasNextPage: false,
-              hasPreviousPage: false,
-            }),
-          onSome: (user) =>
-            pipe(
-              deps.documentRepo.listByUser(user.id, {
-                page: query.page ?? 1,
-                limit: query.limit ?? 20,
-              }),
-              Effect.map((result) => ({
-                documents: result.data.map(
-                  DocumentResponseMapper.toDocumentWithVersionResponse
-                ),
-                total: result.meta.totalItems,
-                page: result.meta.page,
-                limit: result.meta.limit,
-                totalPages: result.meta.totalPages,
-                hasNextPage: result.meta.hasNextPage,
-                hasPreviousPage: result.meta.hasPreviousPage,
-              }))
-            ),
-        })
+      S.decodeUnknown(DocumentDTOs.ListDocumentsQuery)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for listDocuments: ${e}`)
       ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
-    );
-
-/**
- * List all documents (admin only)
- */
-export const listAllDocuments =
-  (deps: DocumentWorkflowDeps) =>
-  (
-    query: ListAllDocumentsQuery,
-    userId: UserId
-  ): Effect.Effect<PaginatedDocumentsResponse, ForbiddenError | Error> =>
-    pipe(
-      deps.userRepo.findById(userId),
-      Effect.flatMap(
-        Option.match({
-          onNone: () =>
-            Effect.fail(
-              new ForbiddenError({
-                message: "User not found",
-                resource: "documents",
-              })
-            ),
-          onSome: (user) =>
-            isAdmin(user)
-              ? pipe(
-                  deps.documentRepo.listAll({
+      Effect.flatMap((query) =>
+        pipe(
+          deps.userRepo.findById(query.userId),
+          Effect.flatMap(
+            Option.match({
+              onNone: () =>
+                Effect.succeed({
+                  documents: [],
+                  total: 0,
+                  page: query.page ?? 1,
+                  limit: query.limit ?? 20,
+                  totalPages: 0,
+                  hasNextPage: false,
+                  hasPreviousPage: false,
+                }),
+              onSome: (user) =>
+                pipe(
+                  deps.documentRepo.listByUser(user.id, {
                     page: query.page ?? 1,
                     limit: query.limit ?? 20,
                   }),
@@ -521,18 +521,73 @@ export const listAllDocuments =
                     totalPages: result.meta.totalPages,
                     hasNextPage: result.meta.hasNextPage,
                     hasPreviousPage: result.meta.hasPreviousPage,
-                  })),
-                  Effect.mapError((e) =>
-                    e instanceof Error ? e : new Error(String(e))
-                  )
-                )
-              : Effect.fail(
+                  }))
+                ),
+            })
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
+        )
+      )
+    );
+
+/**
+ * List all documents (admin only)
+ */
+export const listAllDocuments =
+  (deps: DocumentWorkflowDeps) =>
+  (
+    input: ListAllDocumentsInput
+  ): Effect.Effect<PaginatedDocumentsResponse, ForbiddenError | Error> =>
+    pipe(
+      S.decodeUnknown(DocumentDTOs.ListAllDocumentsQuery)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for listAllDocuments: ${e}`)
+      ),
+      Effect.flatMap((query) =>
+        pipe(
+          deps.userRepo.findById(query.userId),
+          Effect.flatMap(
+            Option.match({
+              onNone: () =>
+                Effect.fail(
                   new ForbiddenError({
-                    message: "Admin access required",
+                    message: "User not found",
                     resource: "documents",
                   })
                 ),
-        })
+              onSome: (user) =>
+                isAdmin(user)
+                  ? pipe(
+                      deps.documentRepo.listAll({
+                        page: query.page ?? 1,
+                        limit: query.limit ?? 20,
+                      }),
+                      Effect.map((result) => ({
+                        documents: result.data.map(
+                          DocumentResponseMapper.toDocumentWithVersionResponse
+                        ),
+                        total: result.meta.totalItems,
+                        page: result.meta.page,
+                        limit: result.meta.limit,
+                        totalPages: result.meta.totalPages,
+                        hasNextPage: result.meta.hasNextPage,
+                        hasPreviousPage: result.meta.hasPreviousPage,
+                      })),
+                      Effect.mapError((e) =>
+                        e instanceof Error ? e : new Error(String(e))
+                      )
+                    )
+                  : Effect.fail(
+                      new ForbiddenError({
+                        message: "Admin access required",
+                        resource: "documents",
+                      })
+                    ),
+            })
+          )
+        )
       )
     );
 
@@ -542,23 +597,33 @@ export const listAllDocuments =
 export const searchDocuments =
   (deps: DocumentWorkflowDeps) =>
   (
-    query: SearchDocumentsQuery
+    input: SearchDocumentsInput
   ): Effect.Effect<SearchDocumentsResponse, Error> =>
     pipe(
-      deps.documentRepo.search(query.query, {
-        page: query.page ?? 1,
-        limit: query.limit ?? 20,
-      }),
-      Effect.map((result) => ({
-        results: result.data.map(DocumentResponseMapper.toDocumentResponse),
-        total: result.meta.totalItems,
-        page: result.meta.page,
-        limit: result.meta.limit,
-        totalPages: result.meta.totalPages,
-        hasNextPage: result.meta.hasNextPage,
-        hasPreviousPage: result.meta.hasPreviousPage,
-      })),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+      S.decodeUnknown(DocumentDTOs.SearchDocumentsQuery)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for searchDocuments: ${e}`)
+      ),
+      Effect.flatMap((query) =>
+        pipe(
+          deps.documentRepo.search(query.query, {
+            page: query.page ?? 1,
+            limit: query.limit ?? 20,
+          }),
+          Effect.map((result) => ({
+            results: result.data.map(DocumentResponseMapper.toDocumentResponse),
+            total: result.meta.totalItems,
+            page: result.meta.page,
+            limit: result.meta.limit,
+            totalPages: result.meta.totalPages,
+            hasNextPage: result.meta.hasNextPage,
+            hasPreviousPage: result.meta.hasPreviousPage,
+          })),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
+        )
+      )
     );
 
 /**
@@ -567,71 +632,82 @@ export const searchDocuments =
 export const deleteDocument =
   (deps: DocumentWorkflowDeps) =>
   (
-    command: DeleteDocumentCommand
+    input: DeleteDocumentInput
   ): Effect.Effect<void, NotFoundError | InsufficientPermissionError | Error> =>
     pipe(
-      Effect.all({
-        document: pipe(
-          deps.documentRepo.findById(command.documentId),
-          Effect.flatMap(
-            Option.match({
-              onNone: () =>
-                Effect.fail(
-                  new NotFoundError({
-                    entityType: "Document",
-                    id: command.documentId,
-                  })
-                ),
-              onSome: Effect.succeed,
-            })
-          )
-        ),
-        user: pipe(
-          deps.userRepo.findById(command.userId),
-          Effect.flatMap(
-            Option.match({
-              onNone: () =>
-                Effect.fail(
-                  new NotFoundError({
-                    entityType: "User",
-                    id: command.userId,
-                  })
-                ),
-              onSome: Effect.succeed,
-            })
-          )
-        ),
-        permissions: deps.permissionRepo.findByDocument(command.documentId),
-      }),
-      Effect.flatMap(({ document, user, permissions }) =>
+      S.decodeUnknown(DocumentDTOs.DeleteDocumentCommand)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for deleteDocument: ${e}`)
+      ),
+      Effect.flatMap((command) =>
         pipe(
-          requireDeletePermission(user, document, permissions),
-          Effect.flatMap(() =>
-            pipe(
-              // Add audit log before deletion
-              deps.documentRepo.addAudit(
-                document.id,
-                "deleted",
-                command.userId,
-                Option.none()
-              ),
-              Effect.flatMap(() =>
-                Effect.all(
-                  document.versions.map((version) =>
-                    pipe(
-                      version.path,
-                      Option.match({
-                        onNone: () => Effect.void,
-                        onSome: (path) => deps.storageService.deleteFile(path),
+          Effect.all({
+            document: pipe(
+              deps.documentRepo.findById(command.documentId),
+              Effect.flatMap(
+                Option.match({
+                  onNone: () =>
+                    Effect.fail(
+                      new NotFoundError({
+                        entityType: "Document",
+                        id: command.documentId,
                       })
+                    ),
+                  onSome: Effect.succeed,
+                })
+              )
+            ),
+            user: pipe(
+              deps.userRepo.findById(command.userId),
+              Effect.flatMap(
+                Option.match({
+                  onNone: () =>
+                    Effect.fail(
+                      new NotFoundError({
+                        entityType: "User",
+                        id: command.userId,
+                      })
+                    ),
+                  onSome: Effect.succeed,
+                })
+              )
+            ),
+            permissions: deps.permissionRepo.findByDocument(command.documentId),
+          }),
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireDeletePermission(user, document, permissions),
+              Effect.flatMap(() =>
+                pipe(
+                  // Add audit log before deletion
+                  deps.documentRepo.addAudit(
+                    document.id,
+                    "deleted",
+                    command.userId,
+                    Option.none()
+                  ),
+                  Effect.flatMap(() =>
+                    Effect.all(
+                      document.versions.map((version) =>
+                        pipe(
+                          version.path,
+                          Option.match({
+                            onNone: () => Effect.void,
+                            onSome: (path) =>
+                              deps.storageService.deleteFile(path),
+                          })
+                        )
+                      )
                     )
-                  )
+                  ),
+                  Effect.flatMap(() => deps.documentRepo.delete(document.id))
                 )
-              ),
-              Effect.flatMap(() => deps.documentRepo.delete(document.id))
+              )
             )
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
           )
         )
-      ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+      )
     );

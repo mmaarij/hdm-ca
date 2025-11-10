@@ -3,9 +3,11 @@
  *
  * Functional workflows using currying pattern.
  * No Effect.gen usage - pure monadic composition with pipe.
+ *
+ * Workflows accept raw Input types and transform them into branded Command/Query types.
  */
 
-import { Effect, Option, pipe } from "effect";
+import { Effect, Option, pipe, Schema as S } from "effect";
 import { v4 as uuidv4 } from "uuid";
 import type { MetadataRepository } from "../../domain/metedata/repository";
 import type { DocumentRepository } from "../../domain/document/repository";
@@ -27,12 +29,18 @@ import {
 } from "../../domain/metedata/entity";
 import type { UserId, DocumentId } from "../../domain/refined/uuid";
 import type {
+  AddMetadataInput,
   AddMetadataCommand,
+  UpdateMetadataInput,
   UpdateMetadataCommand,
+  DeleteMetadataInput,
   DeleteMetadataCommand,
+  ListMetadataInput,
   ListMetadataQuery,
+  GetMetadataByKeyInput,
   GetMetadataByKeyQuery,
 } from "../dtos/metedata/request.dto";
+import * as MetadataDTOs from "../dtos/metedata/request.dto";
 import type {
   MetadataResponse,
   ListMetadataResponse,
@@ -54,11 +62,12 @@ export interface MetadataWorkflowDeps {
 
 /**
  * Add metadata to a document
+ * Accepts raw input and transforms to branded types
  */
 export const addMetadata =
   (deps: MetadataWorkflowDeps) =>
   (
-    command: AddMetadataCommand
+    input: AddMetadataInput
   ): Effect.Effect<
     MetadataResponse,
     | NotFoundError
@@ -67,64 +76,75 @@ export const addMetadata =
     | Error
   > =>
     pipe(
-      Effect.all({
-        document: loadEntity(
-          deps.documentRepo.findById(command.documentId),
-          "Document",
-          command.documentId
-        ),
-        user: loadEntity(
-          deps.userRepo.findById(command.userId),
-          "User",
-          command.userId
-        ),
-        permissions: deps.permissionRepo.findByDocument(command.documentId),
-        existingMetadata: deps.metadataRepo.findByDocumentAndKey(
-          command.documentId,
-          command.key
-        ),
-      }),
-      Effect.flatMap(({ document, user, permissions, existingMetadata }) =>
-        Option.isSome(existingMetadata)
-          ? Effect.fail(
-              new DuplicateMetadataKeyError({
-                message: `Metadata with key '${command.key}' already exists for this document`,
-                key: command.key,
-                documentId: command.documentId,
-              })
-            )
-          : Effect.succeed({ document, user, permissions })
-      ),
-      Effect.flatMap(({ document, user, permissions }) =>
+      // Transform raw input to branded command
+      S.decodeUnknown(MetadataDTOs.AddMetadataCommand)(input),
+      Effect.mapError((e) => new Error(`Invalid input: ${e}`)),
+      Effect.flatMap((command) =>
         pipe(
-          requireWritePermission(user, document, permissions),
-          Effect.map(() => ({ document, user }))
-        )
-      ),
-      Effect.flatMap(() =>
-        pipe(
-          DocumentMetadata.create({
-            id: uuidv4() as any,
-            documentId: command.documentId,
-            key: command.key as any,
-            value: command.value as any,
-            createdAt: new Date().toISOString() as any,
+          Effect.all({
+            document: loadEntity(
+              deps.documentRepo.findById(command.documentId),
+              "Document",
+              command.documentId
+            ),
+            user: loadEntity(
+              deps.userRepo.findById(command.userId),
+              "User",
+              command.userId
+            ),
+            permissions: deps.permissionRepo.findByDocument(command.documentId),
+            existingMetadata: deps.metadataRepo.findByDocumentAndKey(
+              command.documentId,
+              command.key
+            ),
           }),
-          Effect.flatMap((newMetadata) => deps.metadataRepo.save(newMetadata))
+          Effect.flatMap(({ document, user, permissions, existingMetadata }) =>
+            Option.isSome(existingMetadata)
+              ? Effect.fail(
+                  new DuplicateMetadataKeyError({
+                    message: `Metadata with key '${command.key}' already exists for this document`,
+                    key: command.key,
+                    documentId: command.documentId,
+                  })
+                )
+              : Effect.succeed({ document, user, permissions })
+          ),
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireWritePermission(user, document, permissions),
+              Effect.map(() => ({ document, user }))
+            )
+          ),
+          Effect.flatMap(() =>
+            pipe(
+              DocumentMetadata.create({
+                id: uuidv4() as any,
+                documentId: command.documentId,
+                key: command.key as any,
+                value: command.value as any,
+                createdAt: new Date().toISOString() as any,
+              }),
+              Effect.flatMap((newMetadata) =>
+                deps.metadataRepo.save(newMetadata)
+              )
+            )
+          ),
+          Effect.tap((metadata) =>
+            deps.documentRepo.addAudit(
+              command.documentId,
+              "metadata_added",
+              command.userId,
+              Option.some(`Metadata key '${command.key}' added`)
+            )
+          ),
+          Effect.map((metadata) =>
+            MetadataResponseMapper.toMetadataResponse(metadata)
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
         )
-      ),
-      Effect.tap((metadata) =>
-        deps.documentRepo.addAudit(
-          command.documentId,
-          "metadata_added",
-          command.userId,
-          Option.some(`Metadata key '${command.key}' added`)
-        )
-      ),
-      Effect.map((metadata) =>
-        MetadataResponseMapper.toMetadataResponse(metadata)
-      ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+      )
     );
 
 /**
@@ -133,67 +153,77 @@ export const addMetadata =
 export const updateMetadata =
   (deps: MetadataWorkflowDeps) =>
   (
-    command: UpdateMetadataCommand
+    input: UpdateMetadataInput
   ): Effect.Effect<
     MetadataResponse,
     NotFoundError | InsufficientPermissionError | Error
   > =>
     pipe(
-      loadEntity(
-        deps.metadataRepo.findById(command.metadataId),
-        "Metadata",
-        command.metadataId
+      S.decodeUnknown(MetadataDTOs.UpdateMetadataCommand)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for updateMetadata: ${e}`)
       ),
-      Effect.flatMap((metadata) =>
+      Effect.flatMap((command) =>
         pipe(
-          Effect.all({
-            document: loadEntity(
-              deps.documentRepo.findById(metadata.documentId),
-              "Document",
-              metadata.documentId
-            ),
-            user: loadEntity(
-              deps.userRepo.findById(command.userId),
-              "User",
-              command.userId
-            ),
-            permissions: deps.permissionRepo.findByDocument(
-              metadata.documentId
-            ),
+          loadEntity(
+            deps.metadataRepo.findById(command.metadataId),
+            "Metadata",
+            command.metadataId
+          ),
+          Effect.flatMap((metadata) =>
+            pipe(
+              Effect.all({
+                document: loadEntity(
+                  deps.documentRepo.findById(metadata.documentId),
+                  "Document",
+                  metadata.documentId
+                ),
+                user: loadEntity(
+                  deps.userRepo.findById(command.userId),
+                  "User",
+                  command.userId
+                ),
+                permissions: deps.permissionRepo.findByDocument(
+                  metadata.documentId
+                ),
+              }),
+              Effect.map(({ document, user, permissions }) => ({
+                metadata,
+                document,
+                user,
+                permissions,
+              }))
+            )
+          ),
+          Effect.flatMap(({ metadata, document, user, permissions }) =>
+            pipe(
+              requireWritePermission(user, document, permissions),
+              Effect.map(() => metadata)
+            )
+          ),
+          Effect.flatMap((metadata) => {
+            const updatedMetadata = metadata.updateValue(command.value as any);
+            return pipe(
+              deps.metadataRepo.save(updatedMetadata),
+              Effect.map((saved) => ({ saved, metadata }))
+            );
           }),
-          Effect.map(({ document, user, permissions }) => ({
-            metadata,
-            document,
-            user,
-            permissions,
-          }))
+          Effect.tap(({ metadata }) =>
+            deps.documentRepo.addAudit(
+              metadata.documentId,
+              "metadata_updated",
+              command.userId,
+              Option.some(`Metadata key '${metadata.key}' updated`)
+            )
+          ),
+          Effect.map(({ saved }) =>
+            MetadataResponseMapper.toMetadataResponse(saved)
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
         )
-      ),
-      Effect.flatMap(({ metadata, document, user, permissions }) =>
-        pipe(
-          requireWritePermission(user, document, permissions),
-          Effect.map(() => metadata)
-        )
-      ),
-      Effect.flatMap((metadata) => {
-        const updatedMetadata = metadata.updateValue(command.value as any);
-        return pipe(
-          deps.metadataRepo.save(updatedMetadata),
-          Effect.map((saved) => ({ saved, metadata }))
-        );
-      }),
-      Effect.tap(({ metadata }) =>
-        deps.documentRepo.addAudit(
-          metadata.documentId,
-          "metadata_updated",
-          command.userId,
-          Option.some(`Metadata key '${metadata.key}' updated`)
-        )
-      ),
-      Effect.map(({ saved }) =>
-        MetadataResponseMapper.toMetadataResponse(saved)
-      ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+      )
     );
 
 /**
@@ -202,60 +232,70 @@ export const updateMetadata =
 export const deleteMetadata =
   (deps: MetadataWorkflowDeps) =>
   (
-    command: DeleteMetadataCommand
+    input: DeleteMetadataInput
   ): Effect.Effect<void, NotFoundError | InsufficientPermissionError | Error> =>
     pipe(
-      loadEntity(
-        deps.metadataRepo.findById(command.metadataId),
-        "Metadata",
-        command.metadataId
+      S.decodeUnknown(MetadataDTOs.DeleteMetadataCommand)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for deleteMetadata: ${e}`)
       ),
-      Effect.flatMap((metadata) =>
+      Effect.flatMap((command) =>
         pipe(
-          Effect.all({
-            document: loadEntity(
-              deps.documentRepo.findById(metadata.documentId),
-              "Document",
-              metadata.documentId
-            ),
-            user: loadEntity(
-              deps.userRepo.findById(command.userId),
-              "User",
-              command.userId
-            ),
-            permissions: deps.permissionRepo.findByDocument(
-              metadata.documentId
-            ),
-          }),
-          Effect.map(({ document, user, permissions }) => ({
-            metadata,
-            document,
-            user,
-            permissions,
-          }))
+          loadEntity(
+            deps.metadataRepo.findById(command.metadataId),
+            "Metadata",
+            command.metadataId
+          ),
+          Effect.flatMap((metadata) =>
+            pipe(
+              Effect.all({
+                document: loadEntity(
+                  deps.documentRepo.findById(metadata.documentId),
+                  "Document",
+                  metadata.documentId
+                ),
+                user: loadEntity(
+                  deps.userRepo.findById(command.userId),
+                  "User",
+                  command.userId
+                ),
+                permissions: deps.permissionRepo.findByDocument(
+                  metadata.documentId
+                ),
+              }),
+              Effect.map(({ document, user, permissions }) => ({
+                metadata,
+                document,
+                user,
+                permissions,
+              }))
+            )
+          ),
+          Effect.flatMap(({ metadata, document, user, permissions }) =>
+            pipe(
+              requireWritePermission(user, document, permissions),
+              Effect.map(() => metadata)
+            )
+          ),
+          Effect.flatMap((metadata) =>
+            pipe(
+              deps.metadataRepo.delete(command.metadataId),
+              Effect.map(() => metadata)
+            )
+          ),
+          Effect.flatMap((metadata) =>
+            deps.documentRepo.addAudit(
+              metadata.documentId,
+              "metadata_deleted",
+              command.userId,
+              Option.some(`Metadata key '${metadata.key}' deleted`)
+            )
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
         )
-      ),
-      Effect.flatMap(({ metadata, document, user, permissions }) =>
-        pipe(
-          requireWritePermission(user, document, permissions),
-          Effect.map(() => metadata)
-        )
-      ),
-      Effect.flatMap((metadata) =>
-        pipe(
-          deps.metadataRepo.delete(command.metadataId),
-          Effect.map(() => metadata)
-        )
-      ),
-      Effect.flatMap((metadata) =>
-        deps.documentRepo.addAudit(
-          metadata.documentId,
-          "metadata_deleted",
-          command.userId,
-          Option.some(`Metadata key '${metadata.key}' deleted`)
-        )
-      ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+      )
     );
 
 /**
@@ -264,36 +304,46 @@ export const deleteMetadata =
 export const listMetadata =
   (deps: MetadataWorkflowDeps) =>
   (
-    query: ListMetadataQuery
+    input: ListMetadataInput
   ): Effect.Effect<
     ListMetadataResponse,
     NotFoundError | InsufficientPermissionError | Error
   > =>
     pipe(
-      Effect.all({
-        document: loadEntity(
-          deps.documentRepo.findById(query.documentId),
-          "Document",
-          query.documentId
-        ),
-        user: loadEntity(
-          deps.userRepo.findById(query.userId),
-          "User",
-          query.userId
-        ),
-        permissions: deps.permissionRepo.findByDocument(query.documentId),
-      }),
-      Effect.flatMap(({ document, user, permissions }) =>
+      S.decodeUnknown(MetadataDTOs.ListMetadataQuery)(input),
+      Effect.mapError((e) => new Error(`Invalid input for listMetadata: ${e}`)),
+      Effect.flatMap((query) =>
         pipe(
-          requireReadPermission(user, document, permissions),
-          Effect.map(() => document)
+          Effect.all({
+            document: loadEntity(
+              deps.documentRepo.findById(query.documentId),
+              "Document",
+              query.documentId
+            ),
+            user: loadEntity(
+              deps.userRepo.findById(query.userId),
+              "User",
+              query.userId
+            ),
+            permissions: deps.permissionRepo.findByDocument(query.documentId),
+          }),
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireReadPermission(user, document, permissions),
+              Effect.map(() => document)
+            )
+          ),
+          Effect.flatMap(() =>
+            deps.metadataRepo.findByDocument(query.documentId)
+          ),
+          Effect.map((metadata) =>
+            MetadataResponseMapper.toListMetadataResponse(metadata)
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
         )
-      ),
-      Effect.flatMap(() => deps.metadataRepo.findByDocument(query.documentId)),
-      Effect.map((metadata) =>
-        MetadataResponseMapper.toListMetadataResponse(metadata)
-      ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+      )
     );
 
 /**
@@ -302,49 +352,59 @@ export const listMetadata =
 export const getMetadataByKey =
   (deps: MetadataWorkflowDeps) =>
   (
-    query: GetMetadataByKeyQuery
+    input: GetMetadataByKeyInput
   ): Effect.Effect<
     MetadataResponse,
     NotFoundError | InsufficientPermissionError | Error
   > =>
     pipe(
-      Effect.all({
-        document: loadEntity(
-          deps.documentRepo.findById(query.documentId),
-          "Document",
-          query.documentId
-        ),
-        user: loadEntity(
-          deps.userRepo.findById(query.userId),
-          "User",
-          query.userId
-        ),
-        permissions: deps.permissionRepo.findByDocument(query.documentId),
-      }),
-      Effect.flatMap(({ document, user, permissions }) =>
+      S.decodeUnknown(MetadataDTOs.GetMetadataByKeyQuery)(input),
+      Effect.mapError(
+        (e) => new Error(`Invalid input for getMetadataByKey: ${e}`)
+      ),
+      Effect.flatMap((query) =>
         pipe(
-          requireReadPermission(user, document, permissions),
-          Effect.map(() => document)
-        )
-      ),
-      Effect.flatMap(() =>
-        deps.metadataRepo.findByDocumentAndKey(query.documentId, query.key)
-      ),
-      Effect.flatMap(
-        Option.match({
-          onNone: () =>
-            Effect.fail(
-              new NotFoundError({
-                entityType: "Metadata",
-                id: `${query.documentId}:${query.key}`,
-                message: `Metadata with key '${query.key}' not found for document ${query.documentId}`,
-              })
+          Effect.all({
+            document: loadEntity(
+              deps.documentRepo.findById(query.documentId),
+              "Document",
+              query.documentId
             ),
-          onSome: (metadata: DocumentMetadata) => Effect.succeed(metadata),
-        })
-      ),
-      Effect.map((metadata) =>
-        MetadataResponseMapper.toMetadataResponse(metadata)
-      ),
-      Effect.mapError((e) => (e instanceof Error ? e : new Error(String(e))))
+            user: loadEntity(
+              deps.userRepo.findById(query.userId),
+              "User",
+              query.userId
+            ),
+            permissions: deps.permissionRepo.findByDocument(query.documentId),
+          }),
+          Effect.flatMap(({ document, user, permissions }) =>
+            pipe(
+              requireReadPermission(user, document, permissions),
+              Effect.map(() => document)
+            )
+          ),
+          Effect.flatMap(() =>
+            deps.metadataRepo.findByDocumentAndKey(query.documentId, query.key)
+          ),
+          Effect.flatMap(
+            Option.match({
+              onNone: () =>
+                Effect.fail(
+                  new NotFoundError({
+                    entityType: "Metadata",
+                    id: `${query.documentId}:${query.key}`,
+                    message: `Metadata with key '${query.key}' not found for document ${query.documentId}`,
+                  })
+                ),
+              onSome: (metadata: DocumentMetadata) => Effect.succeed(metadata),
+            })
+          ),
+          Effect.map((metadata) =>
+            MetadataResponseMapper.toMetadataResponse(metadata)
+          ),
+          Effect.mapError((e) =>
+            e instanceof Error ? e : new Error(String(e))
+          )
+        )
+      )
     );

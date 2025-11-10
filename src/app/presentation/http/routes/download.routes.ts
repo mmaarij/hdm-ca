@@ -8,11 +8,8 @@ import { Elysia } from "elysia";
 import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { DownloadTokenWorkflowTag } from "../../../application/workflows/download-token-workflow";
-import * as DownloadDTOs from "../../../application/dtos/download-token";
-import { validateBody, validateParams } from "../utils/schema-validation";
 import { runEffect } from "../utils/handler";
 import { withAuth, requireAuth } from "../middleware/auth.middleware";
-import { StoragePortTag } from "../../../application/ports/storage.port";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -43,21 +40,13 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
                   userId: auth.userId,
                 };
 
-                return pipe(
-                  validateBody(
-                    DownloadDTOs.GenerateDownloadLinkCommand,
-                    commandData
-                  ),
-                  Effect.flatMap((command) => {
-                    const protocol = reqHeaders["x-forwarded-proto"] || "http";
-                    const host = reqHeaders["host"] || "localhost:3000";
-                    const baseUrl = `${protocol}://${host}`;
+                const protocol = reqHeaders["x-forwarded-proto"] || "http";
+                const host = reqHeaders["host"] || "localhost:3000";
+                const baseUrl = `${protocol}://${host}`;
 
-                    return downloadWorkflow.generateDownloadLink(
-                      command,
-                      baseUrl
-                    );
-                  })
+                return downloadWorkflow.generateDownloadLink(
+                  commandData,
+                  baseUrl
                 );
               })
             )
@@ -80,10 +69,7 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         const effect = pipe(
           DownloadTokenWorkflowTag,
           Effect.flatMap((downloadWorkflow) =>
-            pipe(
-              validateParams(DownloadDTOs.ValidateDownloadTokenQuery, params),
-              Effect.flatMap((query) => downloadWorkflow.validateToken(query))
-            )
+            downloadWorkflow.validateToken(params)
           )
         );
 
@@ -101,8 +87,7 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
           DownloadTokenWorkflowTag,
           Effect.flatMap((downloadWorkflow) =>
             pipe(
-              validateParams(DownloadDTOs.DownloadFileQuery, params),
-              Effect.flatMap((query) => downloadWorkflow.downloadFile(query)),
+              downloadWorkflow.downloadFile(params),
               // Check if file exists
               Effect.flatMap((fileInfo) =>
                 pipe(
@@ -163,7 +148,7 @@ export const createDownloadRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 downloadWorkflow.cleanupExpiredTokens({
-                  userId: auth.userId as any,
+                  userId: auth.userId,
                 })
               )
             )

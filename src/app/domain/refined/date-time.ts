@@ -37,6 +37,36 @@ export const DateTimeFromAny = S.transform(S.Unknown, DateTime, {
 });
 export type DateTimeFromAny = S.Schema.Type<typeof DateTimeFromAny>;
 
+/**
+ * Union transformer: string → DateTime
+ * Use in DTOs to accept ISO-8601 strings and transform to branded DateTime
+ */
+export const StringToDateTime = S.DateFromString.pipe(S.brand("DateTime"));
+export type StringToDateTime = S.Schema.Type<typeof StringToDateTime>;
+
+/**
+ * Union transformer: number → DateTime
+ * Use in DTOs to accept epoch timestamps and transform to branded DateTime
+ */
+export const NumberToDateTime = S.transform(S.Number, DateTime, {
+  decode: (epoch) => new Date(epoch),
+  encode: (date) => date,
+  strict: false,
+});
+export type NumberToDateTime = S.Schema.Type<typeof NumberToDateTime>;
+
+/**
+ * Union transformer: string | number → DateTime
+ * Use in DTOs to accept either ISO-8601 strings or epoch timestamps
+ */
+export const StringOrNumberToDateTime = S.Union(
+  StringToDateTime,
+  NumberToDateTime
+);
+export type StringOrNumberToDateTime = S.Schema.Type<
+  typeof StringOrNumberToDateTime
+>;
+
 /** Constructors */
 export const makeDateTimeFromIso = (input: unknown) =>
   S.decodeUnknown(DateTimeIso)(input);

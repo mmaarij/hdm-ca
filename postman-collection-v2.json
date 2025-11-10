@@ -18,12 +18,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Server is healthy', () => {",
+                  "pm.test('Server is healthy', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.status).to.eql('healthy');",
                   "});",
-                  "console.log('🏥 Health check passed');"
+                  "console.log('Health check passed');"
                 ],
                 "type": "text/javascript"
               }
@@ -52,14 +52,14 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Admin registered', () => {",
+                  "pm.test('Admin registered', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.user).to.exist;",
                   "    pm.expect(body.user.role).to.eql('ADMIN');",
                   "    pm.environment.set('adminUserId', body.user.id);",
                   "});",
-                  "console.log('👑 Admin user registered');"
+                  "console.log('Admin user registered');"
                 ],
                 "type": "text/javascript"
               }
@@ -96,14 +96,14 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Owner registered', () => {",
+                  "pm.test('Owner registered', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.user).to.exist;",
                   "    pm.expect(body.user.role).to.eql('USER');",
                   "    pm.environment.set('ownerUserId', body.user.id);",
                   "});",
-                  "console.log('👤 Owner user registered');"
+                  "console.log('Owner user registered');"
                 ],
                 "type": "text/javascript"
               }
@@ -136,13 +136,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Collaborator registered', () => {",
+                  "pm.test('Collaborator registered', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.user).to.exist;",
                   "    pm.environment.set('collabUserId', body.user.id);",
                   "});",
-                  "console.log('👥 Collaborator user registered');"
+                  "console.log('Collaborator user registered');"
                 ],
                 "type": "text/javascript"
               }
@@ -175,13 +175,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Admin logged in', () => {",
+                  "pm.test('Admin logged in', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.token).to.exist;",
                   "    pm.environment.set('adminToken', body.token);",
                   "});",
-                  "console.log('🔑 Admin authenticated');"
+                  "console.log('Admin authenticated');"
                 ],
                 "type": "text/javascript"
               }
@@ -214,13 +214,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Owner logged in', () => {",
+                  "pm.test('Owner logged in', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.token).to.exist;",
                   "    pm.environment.set('ownerToken', body.token);",
                   "});",
-                  "console.log('🔑 Owner authenticated');"
+                  "console.log('Owner authenticated');"
                 ],
                 "type": "text/javascript"
               }
@@ -253,13 +253,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Collaborator logged in', () => {",
+                  "pm.test('Collaborator logged in', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.token).to.exist;",
                   "    pm.environment.set('collabToken', body.token);",
                   "});",
-                  "console.log('🔑 Collaborator authenticated');"
+                  "console.log('Collaborator authenticated');"
                 ],
                 "type": "text/javascript"
               }
@@ -292,13 +292,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Owner profile retrieved', () => {",
+                  "pm.test('Owner profile retrieved', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.id).to.exist;",
                   "    pm.expect(body.email).to.eql('owner@hdm.test');",
                   "});",
-                  "console.log('📋 Owner profile fetched');"
+                  "console.log('Owner profile fetched');"
                 ],
                 "type": "text/javascript"
               }
@@ -327,13 +327,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Admin can list all users', () => {",
+                  "pm.test('Admin can list all users', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.users).to.be.an('array');",
                   "    pm.expect(body.users.length).to.be.at.least(3);",
                   "});",
-                  "console.log('📜 All users listed');"
+                  "console.log('All users listed');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -369,7 +369,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Document uploaded (v1)', () => {",
+                  "pm.test('Document uploaded (v1)', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.documentId).to.exist;",
@@ -381,7 +381,7 @@
                   "    pm.environment.set('ownerVersionId', body.versionId);",
                   "    pm.environment.set('ownerVersion1Id', body.versionId);",
                   "});",
-                  "console.log('📤 New document uploaded');",
+                  "console.log('New document uploaded');",
                   "console.log('   Document ID: ' + pm.environment.get('ownerDocId'));",
                   "console.log('   Version 1 ID: ' + pm.environment.get('ownerVersionId'));"
                 ],
@@ -425,7 +425,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ New version uploaded (v2)', () => {",
+                  "pm.test('New version uploaded (v2)', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.documentId).to.eql(pm.environment.get('ownerDocId'));",
@@ -433,7 +433,7 @@
                   "    pm.expect(body.version.versionNumber).to.eql(2);",
                   "    pm.environment.set('ownerVersion2Id', body.versionId);",
                   "});",
-                  "console.log('� Version 2 uploaded');",
+                  "console.log('Version 2 uploaded');",
                   "console.log('   Version 2 ID: ' + pm.environment.get('ownerVersion2Id'));"
                 ],
                 "type": "text/javascript",
@@ -482,7 +482,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Document details retrieved', () => {",
+                  "pm.test('Document details retrieved', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.document.id).to.eql(pm.environment.get('ownerDocId'));",
@@ -490,7 +490,7 @@
                   "    pm.expect(body.latestVersion).to.exist;",
                   "    pm.expect(body.latestVersion.versionNumber).to.eql(2);",
                   "});",
-                  "console.log('📄 Document details fetched (latest = v2)');"
+                  "console.log('Document details fetched (latest = v2)');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -521,16 +521,18 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Specific version retrieved', () => {",
+                  "pm.test('Specific version retrieved', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.id).to.eql(pm.environment.get('ownerVersion1Id'));",
                   "    pm.expect(body.versionNumber).to.eql(1);",
                   "    pm.expect(body.documentId).to.eql(pm.environment.get('ownerDocId'));",
                   "});",
-                  "console.log('📄 Version 1 details fetched');"
+                  "console.log('Version 1 details fetched');"
                 ],
-                "type": "text/javascript"
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
           ],
@@ -562,7 +564,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ All versions listed', () => {",
+                  "pm.test('All versions listed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body).to.be.an('array');",
@@ -570,7 +572,7 @@
                   "    pm.expect(body[0].versionNumber).to.exist;",
                   "    pm.expect(body[1].versionNumber).to.exist;",
                   "});",
-                  "console.log('📚 All versions listed (2 versions)');"
+                  "console.log('All versions listed (2 versions)');"
                 ],
                 "type": "text/javascript"
               }
@@ -599,13 +601,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Owner documents listed', () => {",
+                  "pm.test('Owner documents listed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.documents).to.be.an('array');",
                   "    pm.expect(body.documents.length).to.be.at.least(1);",
                   "});",
-                  "console.log('📚 Owner documents listed');"
+                  "console.log('Owner documents listed');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -636,7 +638,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Search returns unique documents', () => {",
+                  "pm.test('Search returns unique documents', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.results).to.be.an('array');",
@@ -648,7 +650,7 @@
                   "        pm.expect(body.results[0]).to.not.have.property('documentId');",
                   "    }",
                   "});",
-                  "console.log('🔍 Search completed - unique documents only');"
+                  "console.log('Search completed - unique documents only');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -665,13 +667,13 @@
               }
             ],
             "url": {
-              "raw": "{{BASE_URL}}/documents/search?query=project",
+              "raw": "{{BASE_URL}}/documents/search?query=test",
               "host": ["{{BASE_URL}}"],
               "path": ["documents", "search"],
               "query": [
                 {
                   "key": "query",
-                  "value": "project"
+                  "value": "test"
                 }
               ]
             }
@@ -690,10 +692,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Access denied without permission', () => {",
+                  "pm.test('Access denied without permission', () => {",
                   "    pm.response.to.have.status(403);",
                   "});",
-                  "console.log('🚫 Access correctly denied');"
+                  "console.log('Access correctly denied');"
                 ],
                 "type": "text/javascript"
               }
@@ -722,7 +724,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ READ permission granted', () => {",
+                  "pm.test('READ permission granted', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.permission).to.exist;",
@@ -730,7 +732,7 @@
                   "    pm.expect(body.permission.permission).to.eql('READ');",
                   "    pm.environment.set('readPermissionId', body.permission.id);",
                   "});",
-                  "console.log('✅ READ permission granted: ' + pm.environment.get('readPermissionId'));"
+                  "console.log('READ permission granted: ' + pm.environment.get('readPermissionId'));"
                 ],
                 "type": "text/javascript"
               }
@@ -767,12 +769,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Can access with READ permission', () => {",
+                  "pm.test('Can access with READ permission', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.document.id).to.eql(pm.environment.get('ownerDocId'));",
                   "});",
-                  "console.log('✅ Access granted with READ permission');"
+                  "console.log('Access granted with READ permission');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -803,13 +805,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Permission check works', () => {",
+                  "pm.test('Permission check works', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.hasPermission).to.be.true;",
                   "    pm.expect(body.permission).to.eql('READ');",
                   "});",
-                  "console.log('✅ Permission verified');"
+                  "console.log('Permission verified');"
                 ],
                 "type": "text/javascript"
               }
@@ -852,13 +854,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Permissions listed', () => {",
+                  "pm.test('Permissions listed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.permissions).to.be.an('array');",
                   "    pm.expect(body.permissions.length).to.be.at.least(1);",
                   "});",
-                  "console.log('📋 Document permissions listed');"
+                  "console.log('Document permissions listed');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -889,13 +891,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Permission upgraded to WRITE', () => {",
+                  "pm.test('Permission upgraded to WRITE', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.id).to.exist;",
                   "    pm.expect(body.permission).to.eql('WRITE');",
                   "});",
-                  "console.log('⬆️ Permission upgraded to WRITE');"
+                  "console.log('Permission upgraded to WRITE');"
                 ],
                 "type": "text/javascript"
               }
@@ -932,13 +934,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Collaborator uploaded new version with WRITE permission', () => {",
+                  "pm.test('Collaborator uploaded new version with WRITE permission', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.document).to.exist;",
                   "    pm.expect(body.version.versionNumber).to.eql(3);",
                   "});",
-                  "console.log('📤 Collaborator uploaded version 3 with WRITE permission');"
+                  "console.log('Collaborator uploaded version 3 with WRITE permission');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -984,12 +986,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ User permissions listed', () => {",
+                  "pm.test('User permissions listed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.permissions).to.be.an('array');",
                   "});",
-                  "console.log('📋 User permissions listed');"
+                  "console.log('User permissions listed');"
                 ],
                 "type": "text/javascript"
               }
@@ -1018,10 +1020,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Permission revoked', () => {",
+                  "pm.test('Permission revoked', () => {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "console.log('🚫 Permission revoked');"
+                  "console.log('Permission revoked');"
                 ],
                 "type": "text/javascript"
               }
@@ -1050,10 +1052,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Access denied after revocation', () => {",
+                  "pm.test('Access denied after revocation', () => {",
                   "    pm.response.to.have.status(403);",
                   "});",
-                  "console.log('🚫 Access correctly denied after revocation');"
+                  "console.log('Access correctly denied after revocation');"
                 ],
                 "type": "text/javascript"
               }
@@ -1087,14 +1089,14 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Metadata added', () => {",
+                  "pm.test('Metadata added', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.id).to.exist;",
                   "    pm.expect(body.key).to.eql('author');",
                   "    pm.environment.set('metadataId1', body.id);",
                   "});",
-                  "console.log('🏷️ Metadata added: author');"
+                  "console.log('Metadata added: author');"
                 ],
                 "type": "text/javascript"
               }
@@ -1131,12 +1133,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Metadata added', () => {",
+                  "pm.test('Metadata added', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.environment.set('metadataId2', body.id);",
                   "});",
-                  "console.log('🏷️ Metadata added: department');"
+                  "console.log('Metadata added: department');"
                 ],
                 "type": "text/javascript"
               }
@@ -1173,13 +1175,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Metadata retrieved', () => {",
+                  "pm.test('Metadata retrieved', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.metadata).to.be.an('array');",
                   "    pm.expect(body.metadata.length).to.be.at.least(2);",
                   "});",
-                  "console.log('📋 All metadata retrieved');"
+                  "console.log('All metadata retrieved');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -1210,13 +1212,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Specific metadata retrieved', () => {",
+                  "pm.test('Specific metadata retrieved', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.key).to.eql('author');",
                   "    pm.expect(body.value).to.eql('John Doe');",
                   "});",
-                  "console.log('🔍 Metadata retrieved by key');"
+                  "console.log('Metadata retrieved by key');"
                 ],
                 "type": "text/javascript"
               }
@@ -1251,7 +1253,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Metadata updated', () => {",
+                  "pm.test('Metadata updated', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.value).to.eql('Jane Smith');",
@@ -1293,10 +1295,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Metadata deleted', () => {",
+                  "pm.test('Metadata deleted', () => {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "console.log('🗑️ Metadata deleted');"
+                  "console.log('Metadata deleted');"
                 ],
                 "type": "text/javascript"
               }
@@ -1330,7 +1332,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Download link generated', () => {",
+                  "pm.test('Download link generated', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.token).to.exist;",
@@ -1338,7 +1340,7 @@
                   "    pm.expect(body.expiresAt).to.exist;",
                   "    pm.environment.set('downloadToken', body.token);",
                   "});",
-                  "console.log('🔗 Download link generated');"
+                  "console.log('Download link generated');"
                 ],
                 "type": "text/javascript"
               }
@@ -1375,13 +1377,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Token validated', () => {",
+                  "pm.test('Token validated', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.valid).to.be.true;",
                   "    pm.expect(body.documentId).to.exist;",
                   "});",
-                  "console.log('✅ Token is valid');"
+                  "console.log('Token is valid');"
                 ],
                 "type": "text/javascript"
               }
@@ -1405,12 +1407,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ File downloaded', () => {",
+                  "pm.test('File downloaded', () => {",
                   "    pm.response.to.have.status(200);",
                   "    pm.expect(pm.response.headers.get('Content-Type')).to.exist;",
                   "    pm.expect(pm.response.headers.get('Content-Disposition')).to.include('attachment');",
                   "});",
-                  "console.log('⬇️ File downloaded successfully');"
+                  "console.log('File downloaded successfully');"
                 ],
                 "type": "text/javascript"
               }
@@ -1434,10 +1436,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Token already used error', () => {",
+                  "pm.test('Token already used error', () => {",
                   "    pm.response.to.have.status(409);",
                   "});",
-                  "console.log('🚫 Token correctly marked as used');"
+                  "console.log('Token correctly marked as used');"
                 ],
                 "type": "text/javascript"
               }
@@ -1461,12 +1463,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Invalid token detected', () => {",
+                  "pm.test('Invalid token detected', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.valid).to.be.false;",
                   "});",
-                  "console.log('🚫 Invalid token correctly identified');"
+                  "console.log('Invalid token correctly identified');"
                 ],
                 "type": "text/javascript"
               }
@@ -1490,12 +1492,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Cleanup executed', () => {",
+                  "pm.test('Cleanup executed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.deletedCount).to.exist;",
                   "});",
-                  "console.log('🧹 Expired tokens cleaned up');"
+                  "console.log('Expired tokens cleaned up');"
                 ],
                 "type": "text/javascript"
               }
@@ -1529,12 +1531,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Admin can see all documents', () => {",
+                  "pm.test('Admin can see all documents', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.documents).to.be.an('array');",
                   "});",
-                  "console.log('👑 Admin viewing all documents');"
+                  "console.log('Admin viewing all documents');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -1565,10 +1567,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Profile updated', () => {",
+                  "pm.test('Profile updated', () => {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "console.log('👤 Profile updated');"
+                  "console.log('Profile updated');"
                 ],
                 "type": "text/javascript"
               }
@@ -1610,10 +1612,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Unauthorized without token', () => {",
+                  "pm.test('Unauthorized without token', () => {",
                   "    pm.response.to.have.status(401);",
                   "});",
-                  "console.log('🚫 Correctly requires authentication');"
+                  "console.log('Correctly requires authentication');"
                 ],
                 "type": "text/javascript"
               }
@@ -1637,10 +1639,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Invalid token rejected', () => {",
+                  "pm.test('Invalid token rejected', () => {",
                   "    pm.response.to.have.status(401);",
                   "});",
-                  "console.log('🚫 Invalid token correctly rejected');"
+                  "console.log('Invalid token correctly rejected');"
                 ],
                 "type": "text/javascript"
               }
@@ -1669,10 +1671,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Not found for invalid document', () => {",
+                  "pm.test('Not found for invalid document', () => {",
                   "    pm.response.to.have.status(404);",
                   "});",
-                  "console.log('🚫 Non-existent resource correctly handled');"
+                  "console.log('Non-existent resource correctly handled');"
                 ],
                 "type": "text/javascript"
               }
@@ -1701,10 +1703,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Non-owner cannot delete', () => {",
+                  "pm.test('Non-owner cannot delete', () => {",
                   "    pm.response.to.have.status(403);",
                   "});",
-                  "console.log('🚫 Non-owner deletion correctly blocked');"
+                  "console.log('Non-owner deletion correctly blocked');"
                 ],
                 "type": "text/javascript"
               }
@@ -1733,10 +1735,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Non-admin cannot list all users', () => {",
+                  "pm.test('Non-admin cannot list all users', () => {",
                   "    pm.response.to.have.status(403);",
                   "});",
-                  "console.log('🚫 User list access restricted to admins only');"
+                  "console.log('User list access restricted to admins only');"
                 ],
                 "type": "text/javascript"
               }
@@ -1765,10 +1767,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Non-admin cannot cleanup', () => {",
+                  "pm.test('Non-admin cannot cleanup', () => {",
                   "    pm.response.to.have.status(403);",
                   "});",
-                  "console.log('🚫 Admin-only operation protected');"
+                  "console.log('Admin-only operation protected');"
                 ],
                 "type": "text/javascript"
               }
@@ -1802,10 +1804,10 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Document deleted', () => {",
+                  "pm.test('Document deleted', () => {",
                   "    pm.response.to.have.status(200);",
                   "});",
-                  "console.log('🗑️ Test document deleted');"
+                  "console.log('Test document deleted');"
                 ],
                 "type": "text/javascript"
               }
@@ -1834,13 +1836,13 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Owner documents listed', () => {",
+                  "pm.test('Owner documents listed', () => {",
                   "    pm.response.to.have.status(200);",
                   "    const body = pm.response.json();",
                   "    pm.expect(body.documents).to.be.an('array');",
                   "    pm.expect(body.documents.length).to.be.at.least(0);",
                   "});",
-                  "console.log('📚 Owner documents listed');"
+                  "console.log('Owner documents listed');"
                 ],
                 "type": "text/javascript",
                 "packages": {},
@@ -1871,12 +1873,12 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('✅ Final health check passed', () => {",
+                  "pm.test('Final health check passed', () => {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
                   "console.log('\\n========================================');",
-                  "console.log('✅ HDM v2 SIMPLIFIED WORKFLOW TEST COMPLETED');",
+                  "console.log('HDM v2');",
                   "console.log('========================================');",
                   "console.log('✓ Authentication & Authorization');",
                   "console.log('✓ Simplified Single-Step Upload');",
@@ -1886,10 +1888,7 @@
                   "console.log('✓ Download Token System');",
                   "console.log('✓ Advanced Features & Version Access');",
                   "console.log('✓ Security & Edge Cases');",
-                  "console.log('========================================');",
-                  "console.log('🎉 All Systems Operational!');",
-                  "console.log('🚀 Simplified Flow: 10x Easier!');",
-                  "console.log('========================================\\n');"
+                  "console.log('========================================');"
                 ],
                 "type": "text/javascript"
               }
@@ -1937,7 +1936,7 @@
           "// Log response time for performance monitoring",
           "const responseTime = pm.response.responseTime;",
           "if (responseTime > 1000) {",
-          "    console.warn('⚠️ Slow response: ' + pm.info.requestName + ' (' + responseTime + 'ms)');",
+          "    console.warn('Slow response: ' + pm.info.requestName + ' (' + responseTime + 'ms)');",
           "}",
           "",
           "// Check for correlation ID in response",

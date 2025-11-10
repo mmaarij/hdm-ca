@@ -9,8 +9,6 @@ import { Elysia, t } from "elysia";
 import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { DocumentWorkflowTag } from "../../../application/workflows/document-workflow";
-import * as DocumentDTOs from "../../../application/dtos/document";
-import { validateBody, validateQuery } from "../utils/schema-validation";
 import { runEffect } from "../utils/handler";
 import { withAuth, requireAuth } from "../middleware/auth.middleware";
 
@@ -49,12 +47,7 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
                     uploadedBy: auth.userId,
                   };
 
-                  return pipe(
-                    validateBody(DocumentDTOs.UploadDocumentCommand, command),
-                    Effect.flatMap((validatedCommand) =>
-                      documentWorkflow.uploadDocument(validatedCommand)
-                    )
-                  );
+                  return documentWorkflow.uploadDocument(command);
                 })
               )
             )
@@ -85,8 +78,8 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 documentWorkflow.getDocument({
-                  documentId: params.documentId as any,
-                  userId: auth.userId as any,
+                  documentId: params.documentId,
+                  userId: auth.userId,
                 })
               )
             )
@@ -111,9 +104,9 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 documentWorkflow.getDocumentVersion({
-                  documentId: params.documentId as any,
-                  versionId: params.versionId as any,
-                  userId: auth.userId as any,
+                  documentId: params.documentId,
+                  versionId: params.versionId,
+                  userId: auth.userId,
                 })
               )
             )
@@ -163,15 +156,10 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                pipe(
-                  validateQuery(DocumentDTOs.ListDocumentsQuery, {
-                    ...query,
-                    userId: auth.userId,
-                  }),
-                  Effect.flatMap((queryParams) =>
-                    documentWorkflow.listDocuments(queryParams)
-                  )
-                )
+                documentWorkflow.listDocuments({
+                  ...query,
+                  userId: auth.userId,
+                })
               )
             )
           )
@@ -194,15 +182,10 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                pipe(
-                  validateQuery(DocumentDTOs.ListAllDocumentsQuery, query),
-                  Effect.flatMap((queryParams) =>
-                    documentWorkflow.listAllDocuments(
-                      queryParams,
-                      auth.userId as any
-                    )
-                  )
-                )
+                documentWorkflow.listAllDocuments({
+                  ...query,
+                  userId: auth.userId,
+                })
               )
             )
           )
@@ -225,15 +208,12 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                pipe(
-                  validateQuery(DocumentDTOs.SearchDocumentsQuery, {
-                    ...query,
-                    userId: auth.userId,
-                  }),
-                  Effect.flatMap((queryParams) =>
-                    documentWorkflow.searchDocuments(queryParams)
-                  )
-                )
+                documentWorkflow.searchDocuments({
+                  query: (query as any).query,
+                  page: (query as any).page,
+                  limit: (query as any).limit,
+                  userId: auth.userId,
+                })
               )
             )
           )
@@ -257,8 +237,8 @@ export const createDocumentRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 documentWorkflow.deleteDocument({
-                  documentId: params.documentId as any,
-                  userId: auth.userId as any,
+                  documentId: params.documentId,
+                  userId: auth.userId,
                 })
               ),
               Effect.map(() => ({ message: "Document deleted successfully" }))

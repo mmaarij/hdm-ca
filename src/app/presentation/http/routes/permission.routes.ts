@@ -8,8 +8,6 @@ import { Elysia } from "elysia";
 import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { PermissionWorkflowTag } from "../../../application/workflows/permission-workflow";
-import * as PermissionDTOs from "../../../application/dtos/permission";
-import { validateBody, validateQuery } from "../utils/schema-validation";
 import { runEffect } from "../utils/handler";
 import { withAuth, requireAuth } from "../middleware/auth.middleware";
 
@@ -30,15 +28,10 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                pipe(
-                  validateBody(PermissionDTOs.GrantPermissionCommand, {
-                    ...(body as any),
-                    grantedBy: auth.userId,
-                  }),
-                  Effect.flatMap((command) =>
-                    permissionWorkflow.grantPermission(command)
-                  )
-                )
+                permissionWorkflow.grantPermission({
+                  ...(body as any),
+                  grantedBy: auth.userId,
+                })
               )
             )
           )
@@ -61,16 +54,11 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                pipe(
-                  validateBody(PermissionDTOs.UpdatePermissionCommand, {
-                    permissionId: params.permissionId,
-                    updatedBy: auth.userId,
-                    ...(body as any),
-                  }),
-                  Effect.flatMap((command) =>
-                    permissionWorkflow.updatePermission(command)
-                  )
-                )
+                permissionWorkflow.updatePermission({
+                  permissionId: params.permissionId,
+                  updatedBy: auth.userId,
+                  ...(body as any),
+                })
               )
             )
           )
@@ -94,8 +82,8 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 permissionWorkflow.revokePermission({
-                  permissionId: params.permissionId as any,
-                  revokedBy: auth.userId as any,
+                  permissionId: params.permissionId,
+                  revokedBy: auth.userId,
                 })
               ),
               Effect.map(() => ({ message: "Permission revoked successfully" }))
@@ -121,8 +109,8 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 permissionWorkflow.listDocumentPermissions({
-                  documentId: params.documentId as any,
-                  userId: auth.userId as any,
+                  documentId: params.documentId,
+                  userId: auth.userId,
                 })
               )
             )
@@ -147,7 +135,7 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap(() =>
                 permissionWorkflow.listUserPermissions({
-                  userId: params.userId as any,
+                  userId: params.userId,
                 })
               )
             )
@@ -171,12 +159,7 @@ export const createPermissionRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap(() =>
-                pipe(
-                  validateQuery(PermissionDTOs.CheckPermissionQuery, query),
-                  Effect.flatMap((queryParams) =>
-                    permissionWorkflow.checkPermission(queryParams)
-                  )
-                )
+                permissionWorkflow.checkPermission(query as any)
               )
             )
           )

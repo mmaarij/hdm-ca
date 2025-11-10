@@ -8,8 +8,6 @@ import { Elysia } from "elysia";
 import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { UserWorkflowTag } from "../../../application/workflows/user-workflow";
-import * as UserDTOs from "../../../application/dtos/user";
-import { validateBody, validateQuery } from "../utils/schema-validation";
 import { runEffect } from "../utils/handler";
 import { withAuth, requireAuth } from "../middleware/auth.middleware";
 
@@ -28,10 +26,7 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         const effect = pipe(
           UserWorkflowTag,
           Effect.flatMap((userWorkflow) =>
-            pipe(
-              validateBody(UserDTOs.RegisterUserCommand, body),
-              Effect.flatMap((command) => userWorkflow.registerUser(command))
-            )
+            userWorkflow.registerUser(body as any)
           )
         );
 
@@ -46,12 +41,7 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
         const headers = Object.fromEntries(request.headers.entries());
         const effect = pipe(
           UserWorkflowTag,
-          Effect.flatMap((userWorkflow) =>
-            pipe(
-              validateBody(UserDTOs.LoginUserCommand, body),
-              Effect.flatMap((command) => userWorkflow.loginUser(command))
-            )
-          )
+          Effect.flatMap((userWorkflow) => userWorkflow.loginUser(body as any))
         );
 
         return runEffect(effect as any, runtime, headers);
@@ -70,7 +60,7 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 userWorkflow.getUserProfile({
-                  userId: auth.userId as any,
+                  userId: auth.userId,
                 })
               )
             )
@@ -94,12 +84,9 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
           UserWorkflowTag,
           Effect.flatMap((userWorkflow) =>
             pipe(
-              Effect.all({
-                auth: requireAuth(),
-                command: validateBody(UserDTOs.UpdateUserProfileCommand, body),
-              }),
-              Effect.flatMap(({ auth, command }) =>
-                userWorkflow.updateUserProfile(auth.userId as any, command)
+              requireAuth(),
+              Effect.flatMap((auth) =>
+                userWorkflow.updateUserProfile(auth.userId, body as any)
               )
             )
           )
@@ -124,10 +111,7 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                userWorkflow.deleteUser(
-                  { userId: auth.userId as any },
-                  auth.userId as any
-                )
+                userWorkflow.deleteUser({ userId: auth.userId }, auth.userId)
               ),
               Effect.map(() => ({ message: "User deleted successfully" }))
             )
@@ -154,7 +138,7 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap(() =>
                 userWorkflow.getUserProfile({
-                  userId: params.userId as any,
+                  userId: params.userId,
                 })
               )
             )
@@ -180,15 +164,10 @@ export const createUserRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                pipe(
-                  validateQuery(UserDTOs.ListUsersQuery, {
-                    ...query,
-                    userId: auth.userId,
-                  }),
-                  Effect.flatMap((queryParams) =>
-                    userWorkflow.listUsers(queryParams)
-                  )
-                )
+                userWorkflow.listUsers({
+                  ...query,
+                  userId: auth.userId,
+                } as any)
               )
             )
           )

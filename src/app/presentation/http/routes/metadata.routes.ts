@@ -8,8 +8,6 @@ import { Elysia } from "elysia";
 import { Effect, pipe } from "effect";
 import type { Runtime } from "effect";
 import { MetadataWorkflowTag } from "../../../application/workflows/metadata-workflow";
-import * as MetadataDTOs from "../../../application/dtos/metedata";
-import { validateBody } from "../utils/schema-validation";
 import { runEffect } from "../utils/handler";
 import { withAuth, requireAuth } from "../middleware/auth.middleware";
 
@@ -30,15 +28,10 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                pipe(
-                  validateBody(MetadataDTOs.AddMetadataCommand, {
-                    ...(body as any),
-                    userId: auth.userId,
-                  }),
-                  Effect.flatMap((command) =>
-                    metadataWorkflow.addMetadata(command)
-                  )
-                )
+                metadataWorkflow.addMetadata({
+                  ...(body as any),
+                  userId: auth.userId,
+                })
               )
             )
           )
@@ -61,16 +54,11 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
             pipe(
               requireAuth(),
               Effect.flatMap((auth) =>
-                pipe(
-                  validateBody(MetadataDTOs.UpdateMetadataCommand, {
-                    metadataId: params.metadataId,
-                    userId: auth.userId,
-                    ...(body as any),
-                  }),
-                  Effect.flatMap((command) =>
-                    metadataWorkflow.updateMetadata(command)
-                  )
-                )
+                metadataWorkflow.updateMetadata({
+                  metadataId: params.metadataId,
+                  userId: auth.userId,
+                  ...(body as any),
+                })
               )
             )
           )
@@ -94,8 +82,8 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 metadataWorkflow.deleteMetadata({
-                  metadataId: params.metadataId as any,
-                  userId: auth.userId as any,
+                  metadataId: params.metadataId,
+                  userId: auth.userId,
                 })
               ),
               Effect.map(() => ({ message: "Metadata deleted successfully" }))
@@ -121,8 +109,8 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 metadataWorkflow.listMetadata({
-                  documentId: params.documentId as any,
-                  userId: auth.userId as any,
+                  documentId: params.documentId,
+                  userId: auth.userId,
                 })
               )
             )
@@ -147,9 +135,9 @@ export const createMetadataRoutes = <R>(runtime: Runtime.Runtime<R>) => {
               requireAuth(),
               Effect.flatMap((auth) =>
                 metadataWorkflow.getMetadataByKey({
-                  documentId: params.documentId as any,
-                  key: params.key as any,
-                  userId: auth.userId as any,
+                  documentId: params.documentId,
+                  key: params.key,
+                  userId: auth.userId,
                 })
               )
             )
