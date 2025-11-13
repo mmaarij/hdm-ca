@@ -5,7 +5,7 @@
  * Implemented by infrastructure adapters (S3, local filesystem, etc.)
  */
 
-import { Effect, Context } from "effect";
+import { Effect, Context, Schema as S } from "effect";
 import type { DocumentStorageError } from "../../domain/document/errors";
 
 /**
@@ -17,6 +17,34 @@ export interface UploadedFile {
   readonly type?: string;
   readonly arrayBuffer: () => Promise<ArrayBuffer>;
 }
+
+/**
+ * Effect Schema for UploadedFile
+ *
+ * Uses S.declare to create a schema that validates File/Blob objects
+ * from HTTP multipart form uploads (e.g., Elysia's file handling)
+ */
+export const UploadedFileSchema = S.declare(
+  (input: unknown): input is UploadedFile => {
+    if (typeof input !== "object" || input === null) return false;
+
+    const file = input as any;
+
+    // Check if it's a File or Blob-like object with required properties
+    return (
+      typeof file.name === "string" &&
+      typeof file.size === "number" &&
+      (file.type === undefined || typeof file.type === "string") &&
+      typeof file.arrayBuffer === "function"
+    );
+  },
+  {
+    identifier: "UploadedFile",
+    description: "An uploaded file from multipart form data",
+  }
+);
+
+export type UploadedFileFromSchema = S.Schema.Type<typeof UploadedFileSchema>;
 
 /**
  * Result of storing an uploaded file

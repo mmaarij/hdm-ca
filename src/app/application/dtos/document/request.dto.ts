@@ -20,14 +20,14 @@ import {
   FileSize,
   FilePath,
 } from "../../../domain/document/value-object";
-import type { UploadedFile } from "../../ports/storage.port";
+import { UploadedFileSchema } from "../../ports/storage.port";
 
 /**
  * Upload Document Input (raw from API)
  */
 export const UploadDocumentInput = S.Struct({
   documentId: S.optional(S.String),
-  file: S.Any as S.Schema<UploadedFile>,
+  file: UploadedFileSchema,
   uploadedBy: S.String,
 });
 
@@ -42,7 +42,7 @@ export type UploadDocumentInput = S.Schema.Type<typeof UploadDocumentInput>;
  */
 export const UploadDocumentCommand = S.Struct({
   documentId: S.optional(StringToDocumentId),
-  file: S.Any as S.Schema<UploadedFile>,
+  file: UploadedFileSchema,
   uploadedBy: StringToUserId,
 });
 
