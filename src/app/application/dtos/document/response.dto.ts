@@ -17,7 +17,7 @@ import {
   VersionNumber,
 } from "../../../domain/document/value-object";
 import { DateTime } from "../../../domain/refined/date-time";
-import { Paginated } from "../../../domain/shared/pagination";
+import { Paginated, PaginationMeta } from "../../../domain/shared/pagination";
 
 /**
  * Document Response
@@ -83,9 +83,17 @@ export type UploadDocumentResponse = S.Schema.Type<
 /**
  * Paginated Documents Response
  */
-export type PaginatedDocumentsResponse = Paginated<DocumentWithVersionResponse>;
+export const PaginatedDocumentsResponseSchema = Paginated(
+  DocumentWithVersionResponse
+);
+export type PaginatedDocumentsResponse = S.Schema.Type<
+  typeof PaginatedDocumentsResponseSchema
+>;
 
 /**
  * Search Documents Response (returns unique documents, not versions)
  */
-export type SearchDocumentsResponse = Paginated<DocumentResponse>;
+export const SearchDocumentsResponseSchema = Paginated(DocumentResponse);
+export type SearchDocumentsResponse = S.Schema.Type<
+  typeof SearchDocumentsResponseSchema
+>;
