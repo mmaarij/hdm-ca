@@ -512,32 +512,28 @@ export const listDocuments =
           Effect.flatMap(
             Option.match({
               onNone: () =>
-                Effect.succeed({
-                  documents: [],
-                  total: 0,
-                  page: query.page ?? 1,
-                  limit: query.limit ?? 20,
-                  totalPages: 0,
-                  hasNextPage: false,
-                  hasPreviousPage: false,
-                }),
+                Effect.succeed(
+                  DocumentResponseMapper.toPaginatedDocumentsResponse(
+                    [],
+                    0,
+                    query.page ?? 1,
+                    query.limit ?? 20
+                  )
+                ),
               onSome: (user) =>
                 pipe(
                   deps.documentRepo.listByUser(user.id, {
                     page: query.page ?? 1,
                     limit: query.limit ?? 20,
                   }),
-                  Effect.map((result) => ({
-                    documents: result.data.map(
-                      DocumentResponseMapper.toDocumentWithVersionResponse
-                    ),
-                    total: result.meta.totalItems,
-                    page: result.meta.page,
-                    limit: result.meta.limit,
-                    totalPages: result.meta.totalPages,
-                    hasNextPage: result.meta.hasNextPage,
-                    hasPreviousPage: result.meta.hasPreviousPage,
-                  }))
+                  Effect.map((result) =>
+                    DocumentResponseMapper.toPaginatedDocumentsResponse(
+                      result.data,
+                      result.meta.totalItems,
+                      result.meta.page,
+                      result.meta.limit
+                    )
+                  )
                 ),
             })
           ),
@@ -588,17 +584,14 @@ export const listAllDocuments =
                         page: query.page ?? 1,
                         limit: query.limit ?? 20,
                       }),
-                      Effect.map((result) => ({
-                        documents: result.data.map(
-                          DocumentResponseMapper.toDocumentWithVersionResponse
-                        ),
-                        total: result.meta.totalItems,
-                        page: result.meta.page,
-                        limit: result.meta.limit,
-                        totalPages: result.meta.totalPages,
-                        hasNextPage: result.meta.hasNextPage,
-                        hasPreviousPage: result.meta.hasPreviousPage,
-                      })),
+                      Effect.map((result) =>
+                        DocumentResponseMapper.toPaginatedDocumentsResponse(
+                          result.data,
+                          result.meta.totalItems,
+                          result.meta.page,
+                          result.meta.limit
+                        )
+                      ),
                       Effect.mapError((e) =>
                         e instanceof Error ? e : new Error(String(e))
                       )
@@ -642,15 +635,14 @@ export const searchDocuments =
             page: query.page ?? 1,
             limit: query.limit ?? 20,
           }),
-          Effect.map((result) => ({
-            results: result.data.map(DocumentResponseMapper.toDocumentResponse),
-            total: result.meta.totalItems,
-            page: result.meta.page,
-            limit: result.meta.limit,
-            totalPages: result.meta.totalPages,
-            hasNextPage: result.meta.hasNextPage,
-            hasPreviousPage: result.meta.hasPreviousPage,
-          })),
+          Effect.map((result) =>
+            DocumentResponseMapper.toSearchDocumentsResponse(
+              result.data,
+              result.meta.totalItems,
+              result.meta.page,
+              result.meta.limit
+            )
+          ),
           Effect.mapError((e) =>
             e instanceof Error ? e : new Error(String(e))
           )

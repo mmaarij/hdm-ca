@@ -17,6 +17,7 @@ import type {
 import {
   DocumentEntity,
   DocumentVersionEntity,
+  type DocumentWithVersion,
 } from "../../domain/document/entity";
 import type {
   Filename,
@@ -199,24 +200,29 @@ export const DocumentResponseMapper = {
 
   /**
    * Map paginated documents to PaginatedDocumentsResponse DTO
+   * Accepts either DocumentEntity[] or DocumentWithVersion[]
    */
   toPaginatedDocumentsResponse: (
-    documents: readonly DocumentEntity[],
+    documents: readonly (DocumentEntity | DocumentWithVersion)[],
     total: number,
     page: number,
     limit: number
   ): PaginatedDocumentsResponse => {
     const totalPages = Math.ceil(total / limit);
     return {
-      documents: documents.map(
-        DocumentResponseMapper.toDocumentWithVersionResponse
+      data: documents.map((doc) =>
+        "document" in doc
+          ? DocumentResponseMapper.toDocumentWithVersionResponse(doc)
+          : DocumentResponseMapper.toDocumentWithVersionResponse(doc)
       ),
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPreviousPage: page > 1,
+      meta: {
+        page,
+        limit,
+        totalItems: total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
     };
   },
 
@@ -231,13 +237,15 @@ export const DocumentResponseMapper = {
   ): SearchDocumentsResponse => {
     const totalPages = Math.ceil(total / limit);
     return {
-      results: documents.map(DocumentResponseMapper.toDocumentResponse),
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPreviousPage: page > 1,
+      data: documents.map(DocumentResponseMapper.toDocumentResponse),
+      meta: {
+        page,
+        limit,
+        totalItems: total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
     };
   },
 } as const;

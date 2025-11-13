@@ -114,10 +114,14 @@ export const UserResponseMapper = {
     page: number,
     limit: number
   ): ListUsersResponse => ({
-    users: users.map(UserResponseMapper.toUserResponse),
-    total,
-    page,
-    limit,
-    totalPages: Math.ceil(total / limit),
+    data: users.map(UserResponseMapper.toUserResponse),
+    meta: {
+      page,
+      limit,
+      totalItems: total,
+      totalPages: Math.ceil(total / limit),
+      hasNextPage: page < Math.ceil(total / limit),
+      hasPreviousPage: page > 1,
+    },
   }),
 } as const;

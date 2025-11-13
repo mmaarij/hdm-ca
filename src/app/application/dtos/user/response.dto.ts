@@ -10,6 +10,7 @@ import { UserId } from "../../../domain/refined/uuid";
 import { EmailAddress } from "../../../domain/refined/email";
 import { UserRole } from "../../../domain/user/value-object";
 import { DateTime } from "../../../domain/refined/date-time";
+import { Paginated } from "../../../domain/shared/pagination";
 
 /**
  * User Response (Public)
@@ -54,12 +55,4 @@ export type UserProfileResponse = S.Schema.Type<typeof UserProfileResponse>;
 /**
  * List Users Response
  */
-export const ListUsersResponse = S.Struct({
-  users: S.Array(UserResponse),
-  total: S.Number,
-  page: S.Number,
-  limit: S.Number,
-  totalPages: S.Number,
-});
-
-export type ListUsersResponse = S.Schema.Type<typeof ListUsersResponse>;
+export type ListUsersResponse = Paginated<UserResponse>;
